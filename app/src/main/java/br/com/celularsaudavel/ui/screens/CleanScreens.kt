@@ -1,0 +1,333 @@
+package br.com.celularsaudavel.ui.screens
+
+import android.app.Activity
+import android.content.IntentSender
+import android.net.Uri
+import android.os.Build
+import androidx.activity.compose.rememberLauncherForActivityResult
+import androidx.activity.result.IntentSenderRequest
+import androidx.activity.result.contract.ActivityResultContracts
+import androidx.compose.foundation.background
+import androidx.compose.foundation.clickable
+import androidx.compose.foundation.horizontalScroll
+import androidx.compose.foundation.layout.*
+import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.material3.*
+import androidx.compose.runtime.*
+import androidx.compose.ui.Alignment
+import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clip
+import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.style.TextOverflow
+import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.sp
+import br.com.celularsaudavel.model.MediaFile
+import br.com.celularsaudavel.model.formatBytes
+import br.com.celularsaudavel.model.formatCount
+import br.com.celularsaudavel.model.formatDate
+import br.com.celularsaudavel.ui.*
+
+private val canRemove = Build.VERSION.SDK_INT >= 30
+
+@Composable
+fun CleanScreen(
+    state: UiState,
+    onScan: () -> Unit,
+    onOpenDuplicates: () -> Unit,
+    onOpenVideos: () -> Unit,
+    onOpenApps: () -> Unit,
+) {
+    LazyColumn(
+        modifier = Modifier.fillMaxSize(),
+        contentPadding = PaddingValues(20.dp),
+        verticalArrangement = ListSpacing
+    ) {
+        item { ScreenHeader("Limpeza", "Proteja antes de liberar espaço.") }
+        if (!state.scanned) {
+            item {
+                CsCard {
+                    Column {
+                        Text(
+                            if (state.scanning) state.scanStep else "Ainda não analisamos o seu celular.",
+                            color = CS.Ink, fontSize = 16.sp
+                        )
+                        Spacer(Modifier.height(14.dp))
+                        PrimaryButton(if (state.scanning) "Analisando…" else "Analisar agora", onScan, enabled = !state.scanning)
+                    }
+                }
+            }
+        } else {
+            item {
+                RowCard(
+                    "🖼️", "Duplicadas",
+                    if (state.duplicateCount > 0) "${formatCount(state.duplicateCount)} cópias · ${formatBytes(state.duplicateBytes)}" else "Nenhuma cópia encontrada",
+                    onClick = onOpenDuplicates
+                )
+            }
+            item {
+                RowCard(
+                    "🎥", "Vídeos grandes",
+                    if (state.largeVideos.isNotEmpty()) "${state.largeVideos.size} vídeos · ${formatBytes(state.largeVideoBytes)}" else "Nenhum vídeo acima de 100 MB",
+                    onClick = onOpenVideos
+                )
+            }
+            item {
+                RowCard(
+                    "📱", "Aplicativos pouco usados",
+                    if (state.usageAccess) "${state.unusedApps.size} apps · ${formatBytes(state.unusedAppsBytes)}" else "Precisa do acesso de uso",
+                    onClick = onOpenApps
+                )
+            }
+        }
+        item {
+            CsCard(color = CS.GreenSoft) {
+                Column {
+                    Text("Princípio de segurança", fontWeight = FontWeight.Bold, color = CS.Green)
+                    Spacer(Modifier.height(6.dp))
+                    Text("PROTEGER → VERIFICAR → LIBERAR", color = CS.Green, fontWeight = FontWeight.SemiBold)
+                    Spacer(Modifier.height(6.dp))
+                    Text(
+                        "Nesta versão de teste o backup ainda não está ativo. Por isso o app só apaga cópias duplicadas (o original fica) e manda vídeos para a lixeira, de onde podem voltar.",
+                        color = CS.Green, fontSize = 13.sp, lineHeight = 18.sp
+                    )
+                }
+            }
+        }
+        if (!canRemove) {
+            item { Notice("A remoção pelo app exige Android 11 ou mais novo. Aqui você pode revisar e apagar pela Galeria.") }
+        }
+    }
+}
+
+// ---------------- Duplicadas ----------------
+
+@Composable
+fun DuplicatesScreen(
+    state: UiState,
+    onBack: () -> Unit,
+    makeRequest: (List<Uri>) -> IntentSender?,
+    onRemoved: (List<MediaFile>) -> Unit,
+) {
+    val groups = state.duplicates
+    var selected by remember(groups) {
+        mutableStateOf(groups.flatMap { g -> g.copies.map { it.uri } }.toSet())
+    }
+    var hint by remember { mutableStateOf<String?>(null) }
+    var confirm by remember { mutableStateOf(false) }
+    var pending by remember { mutableStateOf<List<MediaFile>>(emptyList()) }
+
+    val launcher = rememberLauncherForActivityResult(ActivityResultContracts.StartIntentSenderForResult()) { r ->
+        if (r.resultCode == Activity.RESULT_OK) onRemoved(pending)
+        pending = emptyList()
+    }
+
+    val chosen = groups.flatMap { it.files }.filter { it.uri in selected }
+    val chosenBytes = chosen.sumOf { it.sizeBytes }
+
+    Column(Modifier.fillMaxSize()) {
+        LazyColumn(
+            modifier = Modifier.weight(1f),
+            contentPadding = PaddingValues(20.dp),
+            verticalArrangement = ListSpacing
+        ) {
+            item {
+                ScreenHeader(
+                    "Duplicadas",
+                    "Arquivos com conteúdo idêntico. Em cada grupo pelo menos um fica guardado.",
+                    onBack
+                )
+            }
+            if (groups.isEmpty()) {
+                item { Notice("Nenhuma cópia encontrada. 👏", soft = false) }
+            }
+            hint?.let { item { Notice(it) } }
+            items(groups, key = { it.original.uri.toString() }) { g ->
+                CsCard {
+                    Column {
+                        Text(
+                            "${g.files.size} iguais · ${formatBytes(g.original.sizeBytes)} cada",
+                            fontWeight = FontWeight.SemiBold, color = CS.Ink
+                        )
+                        Text(g.original.name, color = CS.Muted, fontSize = 13.sp, maxLines = 1, overflow = TextOverflow.Ellipsis)
+                        Spacer(Modifier.height(12.dp))
+                        Row(
+                            Modifier.horizontalScroll(rememberScrollState()),
+                            horizontalArrangement = Arrangement.spacedBy(10.dp)
+                        ) {
+                            g.files.forEachIndexed { index, f ->
+                                val isSel = f.uri in selected
+                                Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                                    Box {
+                                        MediaThumb(
+                                            f.uri,
+                                            Modifier
+                                                .size(96.dp)
+                                                .clickable {
+                                                    if (isSel) {
+                                                        selected = selected - f.uri
+                                                        hint = null
+                                                    } else {
+                                                        val others = g.files.filter { it.uri != f.uri }
+                                                        if (others.all { it.uri in selected }) {
+                                                            hint = "Pelo menos um arquivo de cada grupo precisa ficar."
+                                                        } else {
+                                                            selected = selected + f.uri
+                                                            hint = null
+                                                        }
+                                                    }
+                                                }
+                                        )
+                                        if (isSel) {
+                                            Box(
+                                                Modifier
+                                                    .align(Alignment.TopEnd)
+                                                    .padding(6.dp)
+                                                    .clip(RoundedCornerShape(8.dp))
+                                                    .background(CS.Ink)
+                                                    .padding(horizontal = 6.dp, vertical = 2.dp)
+                                            ) { Text("apagar", color = androidx.compose.ui.graphics.Color.White, fontSize = 11.sp) }
+                                        }
+                                    }
+                                    Spacer(Modifier.height(4.dp))
+                                    Text(
+                                        if (index == 0) "mais antigo" else formatDate(f.dateModifiedSec * 1000),
+                                        fontSize = 11.sp, color = CS.Muted
+                                    )
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+        }
+        if (groups.isNotEmpty()) {
+            Column(Modifier.background(CS.Surface).padding(20.dp)) {
+                Text("Toque nas fotos para escolher o que apagar.", color = CS.Muted, fontSize = 13.sp)
+                Spacer(Modifier.height(10.dp))
+                PrimaryButton(
+                    "Apagar ${chosen.size} cópias · ${formatBytes(chosenBytes)}",
+                    onClick = { confirm = true },
+                    enabled = chosen.isNotEmpty() && canRemove
+                )
+            }
+        }
+    }
+
+    if (confirm) {
+        AlertDialog(
+            onDismissRequest = { confirm = false },
+            title = { Text("Confirme a liberação") },
+            text = {
+                Text(
+                    "${chosen.size} cópias (${formatBytes(chosenBytes)}) serão apagadas deste celular. " +
+                        "Em cada grupo, pelo menos um arquivo idêntico continua guardado. " +
+                        "O Android vai pedir uma confirmação final."
+                )
+            },
+            confirmButton = {
+                TextButton(onClick = {
+                    confirm = false
+                    val sender = makeRequest(chosen.map { it.uri })
+                    if (sender != null) {
+                        pending = chosen
+                        launcher.launch(IntentSenderRequest.Builder(sender).build())
+                    }
+                }) { Text("Liberar espaço") }
+            },
+            dismissButton = { TextButton(onClick = { confirm = false }) { Text("Cancelar") } }
+        )
+    }
+}
+
+// ---------------- Vídeos grandes ----------------
+
+@Composable
+fun LargeVideosScreen(
+    state: UiState,
+    onBack: () -> Unit,
+    makeRequest: (List<Uri>) -> IntentSender?,
+    onRemoved: (List<MediaFile>) -> Unit,
+) {
+    val videos = state.largeVideos
+    var selected by remember(videos) { mutableStateOf(emptySet<Uri>()) }
+    var confirm by remember { mutableStateOf(false) }
+    var pending by remember { mutableStateOf<List<MediaFile>>(emptyList()) }
+
+    val launcher = rememberLauncherForActivityResult(ActivityResultContracts.StartIntentSenderForResult()) { r ->
+        if (r.resultCode == Activity.RESULT_OK) onRemoved(pending)
+        pending = emptyList()
+    }
+
+    val chosen = videos.filter { it.uri in selected }
+    val chosenBytes = chosen.sumOf { it.sizeBytes }
+
+    Column(Modifier.fillMaxSize()) {
+        LazyColumn(
+            modifier = Modifier.weight(1f),
+            contentPadding = PaddingValues(20.dp),
+            verticalArrangement = Arrangement.spacedBy(10.dp)
+        ) {
+            item { ScreenHeader("Vídeos grandes", "Acima de 100 MB, do maior para o menor.", onBack) }
+            item {
+                Notice("Esses vídeos ainda não têm backup. Por segurança eles vão para a lixeira do sistema e podem ser recuperados por cerca de 30 dias.")
+            }
+            if (videos.isEmpty()) item { Notice("Nenhum vídeo grande encontrado. 👏", soft = false) }
+            items(videos, key = { it.uri.toString() }) { v ->
+                val isSel = v.uri in selected
+                CsCard(onClick = { selected = if (isSel) selected - v.uri else selected + v.uri }) {
+                    Row(verticalAlignment = Alignment.CenterVertically) {
+                        MediaThumb(v.uri, Modifier.size(64.dp))
+                        Spacer(Modifier.width(14.dp))
+                        Column(Modifier.weight(1f)) {
+                            Text(formatBytes(v.sizeBytes), fontWeight = FontWeight.SemiBold, color = CS.Ink, fontSize = 17.sp)
+                            Text(v.name, color = CS.Muted, fontSize = 13.sp, maxLines = 1, overflow = TextOverflow.Ellipsis)
+                            Text(formatDate(v.dateModifiedSec * 1000), color = CS.Muted, fontSize = 12.sp)
+                        }
+                        Checkbox(
+                            checked = isSel,
+                            onCheckedChange = { selected = if (it) selected + v.uri else selected - v.uri },
+                            colors = CheckboxDefaults.colors(checkedColor = CS.Ink)
+                        )
+                    }
+                }
+            }
+        }
+        if (videos.isNotEmpty()) {
+            Column(Modifier.background(CS.Surface).padding(20.dp)) {
+                PrimaryButton(
+                    if (chosen.isEmpty()) "Selecione os vídeos" else "Mover ${chosen.size} para a lixeira · ${formatBytes(chosenBytes)}",
+                    onClick = { confirm = true },
+                    enabled = chosen.isNotEmpty() && canRemove
+                )
+            }
+        }
+    }
+
+    if (confirm) {
+        AlertDialog(
+            onDismissRequest = { confirm = false },
+            title = { Text("Mover para a lixeira?") },
+            text = {
+                Text(
+                    "${chosen.size} vídeos (${formatBytes(chosenBytes)}) vão para a lixeira do sistema. " +
+                        "Eles ainda não têm backup verificado. O espaço é liberado de vez quando a lixeira for esvaziada " +
+                        "(automaticamente após cerca de 30 dias ou pelo app de galeria)."
+                )
+            },
+            confirmButton = {
+                TextButton(onClick = {
+                    confirm = false
+                    val sender = makeRequest(chosen.map { it.uri })
+                    if (sender != null) {
+                        pending = chosen
+                        launcher.launch(IntentSenderRequest.Builder(sender).build())
+                    }
+                }) { Text("Mover para a lixeira") }
+            },
+            dismissButton = { TextButton(onClick = { confirm = false }) { Text("Cancelar") } }
+        )
+    }
+}
