@@ -83,6 +83,16 @@
             </intent-filter>
         </receiver>
 
+        <!-- Widget da tela inicial -->
+        <receiver android:name=".data.HealthWidget" android:exported="true" android:label="Saúde do celular">
+            <intent-filter>
+                <action android:name="android.appwidget.action.APPWIDGET_UPDATE" />
+            </intent-filter>
+            <meta-data
+                android:name="android.appwidget.provider"
+                android:resource="@xml/widget_saude_info" />
+        </receiver>
+
         <!-- Abrir um arquivo em outro app (visualizar antes de apagar) -->
         <provider
             android:name="androidx.core.content.FileProvider"

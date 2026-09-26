@@ -75,6 +75,25 @@ class MonitorPrefs(context: Context) {
         set(v) = p.edit().putInt("dailyHour", v).apply()
 
     /** Último índice completo calculado no app (com duplicadas, apps etc.). */
+    var dailyMinute: Int
+        get() = p.getInt("dailyMinute", 0)
+        set(v) = p.edit().putInt("dailyMinute", v).apply()
+
+    /** Frequência do boletim: "D" diário, "W" semanal, "M" mensal. */
+    var bulletinFreq: String
+        get() = p.getString("freq", "D") ?: "D"
+        set(v) = p.edit().putString("freq", v).apply()
+
+    /** Dia da semana do boletim semanal (Calendar.SUNDAY..SATURDAY). Padrão: segunda. */
+    var weekDay: Int
+        get() = p.getInt("weekDay", java.util.Calendar.MONDAY)
+        set(v) = p.edit().putInt("weekDay", v).apply()
+
+    /** Dia do mês do boletim mensal (1–28). */
+    var monthDay: Int
+        get() = p.getInt("monthDay", 1)
+        set(v) = p.edit().putInt("monthDay", v).apply()
+
     var lastScore: Int
         get() = p.getInt("lastScore", -1)
         set(v) = p.edit().putInt("lastScore", v).apply()
@@ -95,7 +114,7 @@ object HealthNotifier {
         Build.VERSION.SDK_INT < 33 ||
             context.checkSelfPermission(android.Manifest.permission.POST_NOTIFICATIONS) == PackageManager.PERMISSION_GRANTED
 
-    const val CHANNEL_DAILY = "boletim"
+    const val CHANNEL_DAILY = "boletim_v2"
 
     fun notify(context: Context, id: Int, title: String, text: String, channel: String = CHANNEL) {
         if (!canNotify(context)) return
@@ -110,8 +129,11 @@ object HealthNotifier {
         if (nm.getNotificationChannel(CHANNEL_DAILY) == null) {
             // Silencioso: chega de madrugada sem som nem vibração e espera a pessoa acordar.
             nm.createNotificationChannel(
-                NotificationChannel(CHANNEL_DAILY, "Boletim diário", NotificationManager.IMPORTANCE_LOW).apply {
-                    description = "Resumo diário da saúde do celular, sem som"
+                NotificationChannel(CHANNEL_DAILY, "Boletim da saúde do celular", NotificationManager.IMPORTANCE_DEFAULT).apply {
+                    description = "Resumo da saúde do celular. Aparece na tela de bloqueio, sem som nem vibração."
+                    setSound(null, null)
+                    enableVibration(false)
+                    lockscreenVisibility = android.app.Notification.VISIBILITY_PUBLIC
                 }
             )
         }
@@ -127,6 +149,8 @@ object HealthNotifier {
             .setContentText(text)
             .setStyle(NotificationCompat.BigTextStyle().bigText(text))
             .setContentIntent(open)
+            .setVisibility(NotificationCompat.VISIBILITY_PUBLIC)
+            .setSilent(channel == CHANNEL_DAILY)
             .setAutoCancel(true)
             .build()
         try {
@@ -230,6 +254,7 @@ class HealthMonitorWorker(ctx: Context, params: WorkerParameters) : CoroutineWor
 
     override suspend fun doWork(): Result {
         runCatching { RecycleBin(applicationContext).purgeExpired(DriveRepository(applicationContext)) }
+        runCatching { HealthWidget.updateAll(applicationContext) }
         return try {
             runChecks(applicationContext)
             Result.success()

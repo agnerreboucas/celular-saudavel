@@ -237,6 +237,7 @@ fun MonitorScreen(
     onOpenPremium: () -> Unit,
     onSetDaily: (enabled: Boolean?, hour: Int?) -> Unit,
     onTestDaily: () -> Unit,
+    onSetBulletin: (freq: String?, weekDay: Int?, monthDay: Int?, hour: Int?, minute: Int?) -> Unit,
 ) {
     val m = state.monitor
     LazyColumn(
@@ -273,21 +274,54 @@ fun MonitorScreen(
                         }
                         HorizontalDivider(Modifier.padding(vertical = 8.dp), color = CS.Surface2)
                         if (state.premium) {
+                            val hhmm = "%02d:%02d".format(m.dailyHour, m.dailyMinute)
+                            val weekNames = listOf("Domingo", "Segunda", "Terça", "Quarta", "Quinta", "Sexta", "Sábado")
+                            val whenText = when (m.freq) {
+                                "W" -> "Toda ${weekNames[(m.weekDay - 1).coerceIn(0, 6)].lowercase()} às $hhmm"
+                                "M" -> "Todo dia ${m.monthDay} às $hhmm"
+                                else -> "Todo dia às $hhmm"
+                            }
                             SwitchRow(
-                                "Boletim diário às ${m.dailyHour}h",
-                                "Todo dia, o índice de saúde e o espaço livre. Chega sem som, para não acordar ninguém.",
+                                "Boletim da saúde do celular",
+                                "$whenText. Aparece na tela de bloqueio, sem som nem vibração.",
                                 m.dailyEnabled
                             ) { onSetDaily(it, null) }
                             if (m.dailyEnabled) {
-                                Row(
-                                    Modifier.horizontalScroll(rememberScrollState()).padding(top = 8.dp),
-                                    horizontalArrangement = Arrangement.spacedBy(8.dp)
-                                ) {
-                                    listOf(5, 6, 7, 8, 12, 20).forEach { hr ->
-                                        Pill("${hr}h", m.dailyHour == hr) { onSetDaily(null, hr) }
+                                val context = androidx.compose.ui.platform.LocalContext.current
+                                Column(Modifier.padding(top = 8.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                                    Text("Frequência", color = CS.Muted, fontSize = 13.sp)
+                                    Row(Modifier.horizontalScroll(rememberScrollState()), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                                        Pill("Diário", m.freq == "D") { onSetBulletin("D", null, null, null, null) }
+                                        Pill("Semanal", m.freq == "W") { onSetBulletin("W", null, null, null, null) }
+                                        Pill("Mensal", m.freq == "M") { onSetBulletin("M", null, null, null, null) }
                                     }
+                                    if (m.freq == "W") {
+                                        Text("Dia da semana", color = CS.Muted, fontSize = 13.sp)
+                                        Row(Modifier.horizontalScroll(rememberScrollState()), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                                            // Calendar: domingo = 1 ... sábado = 7; mostra de segunda a domingo
+                                            listOf(2, 3, 4, 5, 6, 7, 1).forEach { d ->
+                                                Pill(weekNames[d - 1].take(3), m.weekDay == d) { onSetBulletin(null, d, null, null, null) }
+                                            }
+                                        }
+                                    }
+                                    if (m.freq == "M") {
+                                        Text("Dia do mês", color = CS.Muted, fontSize = 13.sp)
+                                        Row(Modifier.horizontalScroll(rememberScrollState()), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                                            (1..28).forEach { d ->
+                                                Pill("$d", m.monthDay == d) { onSetBulletin(null, null, d, null, null) }
+                                            }
+                                        }
+                                    }
+                                    Text("Horário", color = CS.Muted, fontSize = 13.sp)
+                                    OutlinedButton(onClick = {
+                                        android.app.TimePickerDialog(
+                                            context,
+                                            { _, h, min -> onSetBulletin(null, null, null, h, min) },
+                                            m.dailyHour, m.dailyMinute, true
+                                        ).show()
+                                    }) { Text("🕔 $hhmm · alterar", color = CS.Ink) }
+                                    TextButton(onClick = onTestDaily) { Text("Ver como chega o boletim", color = CS.Ink) }
                                 }
-                                TextButton(onClick = onTestDaily) { Text("Ver como chega o boletim", color = CS.Ink) }
                             }
                             HorizontalDivider(Modifier.padding(vertical = 8.dp), color = CS.Surface2)
                             SwitchRow("Check-up semanal", "Índice de saúde, espaço livre e quanto o celular encheu na semana.", m.weeklyCheckup) {
@@ -299,7 +333,7 @@ fun MonitorScreen(
                             }
                         } else {
                             Text(
-                                "⭐ Boletim diário, check-up semanal e lembrete de backup fazem parte do Premium.",
+                                "⭐ Boletim da saúde (diário, semanal ou mensal), check-up semanal e lembrete de backup fazem parte do Premium.",
                                 color = CS.Green, fontSize = 14.sp
                             )
                             TextButton(onClick = onOpenPremium) { Text("Conhecer o Premium", color = CS.Ink) }

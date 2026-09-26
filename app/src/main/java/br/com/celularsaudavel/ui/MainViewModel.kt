@@ -76,6 +76,10 @@ data class MonitorUi(
     val canNotify: Boolean = false,
     val dailyEnabled: Boolean = true,
     val dailyHour: Int = 5,
+    val dailyMinute: Int = 0,
+    val freq: String = "D",
+    val weekDay: Int = java.util.Calendar.MONDAY,
+    val monthDay: Int = 1,
 )
 
 /** Resultado de uma limpeza, mostrado como comemoração. */
@@ -285,6 +289,7 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
                 monitorPrefs.lastScore = h.value
                 monitorPrefs.lastScoreAt = System.currentTimeMillis()
             }
+            runCatching { br.com.celularsaudavel.data.HealthWidget.updateAll(getApplication()) }
             refreshBackupSummary()
         }
     }
@@ -481,7 +486,21 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
         canNotify = HealthNotifier.canNotify(getApplication()),
         dailyEnabled = monitorPrefs.dailyEnabled,
         dailyHour = monitorPrefs.dailyHour,
+        dailyMinute = monitorPrefs.dailyMinute,
+        freq = monitorPrefs.bulletinFreq,
+        weekDay = monitorPrefs.weekDay,
+        monthDay = monitorPrefs.monthDay,
     )
+
+    fun setBulletin(freq: String? = null, weekDay: Int? = null, monthDay: Int? = null, hour: Int? = null, minute: Int? = null) {
+        freq?.let { monitorPrefs.bulletinFreq = it }
+        weekDay?.let { monitorPrefs.weekDay = it }
+        monthDay?.let { monitorPrefs.monthDay = it }
+        hour?.let { monitorPrefs.dailyHour = it }
+        minute?.let { monitorPrefs.dailyMinute = it }
+        DailyBulletin.schedule(getApplication())
+        _state.update { it.copy(monitor = monitorUi()) }
+    }
 
     fun setDaily(enabled: Boolean? = null, hour: Int? = null) {
         enabled?.let { monitorPrefs.dailyEnabled = it }

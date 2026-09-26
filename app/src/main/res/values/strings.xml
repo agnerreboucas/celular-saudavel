@@ -1,3 +1,4 @@
 <resources>
     <string name="app_name">Celular Saudável</string>
+    <string name="widget_desc">Índice de saúde e espaço livre do celular</string>
 </resources>

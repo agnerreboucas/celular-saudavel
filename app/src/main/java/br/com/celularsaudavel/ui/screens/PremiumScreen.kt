@@ -57,7 +57,7 @@ fun PremiumScreen(
                     listOf(
                         "☁️" to "Backup no seu Google Drive com verificação de cada arquivo",
                         "🧹" to "Liberar espaço só do que já está protegido",
-                        "🌅" to "Boletim diário da saúde do celular às 5h",
+                        "🌅" to "Boletim da saúde no dia e na hora que você escolher",
                         "🔔" to "Check-up semanal com o índice de saúde",
                         "⏰" to "Lembrete quando o backup ficar antigo",
                         "📱" to "Use em todos os seus celulares com a mesma conta Google",
