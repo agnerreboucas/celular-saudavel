@@ -55,13 +55,23 @@ class MediaRepository(private val context: Context) {
 
     // ---------- Consulta de mídia ----------
 
+    @Suppress("DEPRECATION")
+    private val pathColumn =
+        if (Build.VERSION.SDK_INT >= 29) MediaStore.MediaColumns.RELATIVE_PATH else MediaStore.MediaColumns.DATA
+
+    @Suppress("DEPRECATION")
+    private val takenColumn =
+        if (Build.VERSION.SDK_INT >= 29) MediaStore.MediaColumns.DATE_TAKEN else MediaStore.Images.ImageColumns.DATE_TAKEN
+
     private fun query(collection: Uri, isVideo: Boolean): List<MediaFile> {
         val projection = arrayOf(
             MediaStore.MediaColumns._ID,
             MediaStore.MediaColumns.DISPLAY_NAME,
             MediaStore.MediaColumns.SIZE,
             MediaStore.MediaColumns.MIME_TYPE,
-            MediaStore.MediaColumns.DATE_MODIFIED
+            MediaStore.MediaColumns.DATE_MODIFIED,
+            pathColumn,
+            takenColumn
         )
         val out = ArrayList<MediaFile>()
         try {
@@ -71,15 +81,21 @@ class MediaRepository(private val context: Context) {
                 val sizeCol = c.getColumnIndexOrThrow(MediaStore.MediaColumns.SIZE)
                 val mimeCol = c.getColumnIndexOrThrow(MediaStore.MediaColumns.MIME_TYPE)
                 val dateCol = c.getColumnIndexOrThrow(MediaStore.MediaColumns.DATE_MODIFIED)
+                val pathCol = c.getColumnIndex(pathColumn)
+                val takenCol = c.getColumnIndex(takenColumn)
                 while (c.moveToNext()) {
                     val id = c.getLong(idCol)
+                    var folder = if (pathCol >= 0) c.getString(pathCol) ?: "" else ""
+                    if (Build.VERSION.SDK_INT < 29) folder = folder.substringBeforeLast('/', "")
                     out += MediaFile(
                         uri = ContentUris.withAppendedId(collection, id),
                         name = c.getString(nameCol) ?: "Sem nome",
                         sizeBytes = c.getLong(sizeCol),
                         mimeType = c.getString(mimeCol) ?: "",
                         dateModifiedSec = c.getLong(dateCol),
-                        isVideo = isVideo
+                        isVideo = isVideo,
+                        folder = folder,
+                        dateTakenMs = if (takenCol >= 0) c.getLong(takenCol) else 0L
                     )
                 }
             }
@@ -150,6 +166,28 @@ class MediaRepository(private val context: Context) {
             videos = CategoryStat(videos.size, videos.sumOf { it.sizeBytes }),
             audio = CategoryStat(a.size, a.sumOf { it.sizeBytes })
         )
+    }
+
+    fun screenshots(images: List<MediaFile>): List<MediaFile> =
+        images.filter { it.folder.contains("screenshot", ignoreCase = true) }
+            .sortedByDescending { it.dateModifiedSec }
+
+    /** Fotos da câmera tiradas com até 3 s de diferença: rajadas e cliques repetidos. */
+    fun sequences(images: List<MediaFile>): List<DuplicateGroup> {
+        val cam = images
+            .filter { it.folder.contains("camera", ignoreCase = true) && it.dateTakenMs > 0 }
+            .sortedBy { it.dateTakenMs }
+        val groups = ArrayList<DuplicateGroup>()
+        var current = ArrayList<MediaFile>()
+        for (f in cam) {
+            if (current.isNotEmpty() && f.dateTakenMs - current.last().dateTakenMs > 3000) {
+                if (current.size >= 2) groups += DuplicateGroup(current)
+                current = ArrayList()
+            }
+            current.add(f)
+        }
+        if (current.size >= 2) groups += DuplicateGroup(current)
+        return groups.sortedByDescending { it.files.first().dateTakenMs }
     }
 
     fun largeVideos(videos: List<MediaFile>, minBytes: Long = 100_000_000L): List<MediaFile> =

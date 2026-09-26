@@ -100,6 +100,7 @@ fun PermissionsScreen(
     onRequestMedia: () -> Unit,
     onOpenAppSettings: () -> Unit,
     onOpenUsageSettings: () -> Unit,
+    onRequestFolders: () -> Unit,
 ) {
     LazyColumn(
         modifier = Modifier.fillMaxSize(),
@@ -118,6 +119,15 @@ fun PermissionsScreen(
                 },
                 ok = state.mediaAccess == MediaAccess.FULL,
                 actions = listOf("Pedir acesso" to onRequestMedia, "Abrir ajustes do app" to onOpenAppSettings)
+            )
+        }
+        item {
+            PermissionCard(
+                "Acesso a todos os arquivos",
+                "Para analisar pastas do WhatsApp (inclusive as ocultas), Telegram, Downloads e temporários.",
+                if (state.folderAccess) "Liberado" else "Não liberado",
+                ok = state.folderAccess,
+                actions = listOf("Liberar" to onRequestFolders)
             )
         }
         item {
@@ -186,7 +196,8 @@ fun PrivacyScreen(onBack: () -> Unit) {
                         "✓ Nada é apagado sem a sua confirmação e a do Android.",
                         "✓ Não vendemos nem compartilhamos dados.",
                         "✓ O histórico fica só neste aparelho.",
-                        "✓ Esta versão não usa internet."
+                        "✓ A internet só é usada para o backup no SEU Google Drive, quando você pede.",
+                        "✓ O app só enxerga no Drive os arquivos que ele mesmo enviou."
                     ).forEach { Text(it, color = CS.Ink, fontSize = 15.sp, lineHeight = 21.sp) }
                 }
             }

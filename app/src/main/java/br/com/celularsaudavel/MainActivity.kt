@@ -1,6 +1,7 @@
 package br.com.celularsaudavel
 
 import android.Manifest
+import android.app.Activity
 import android.content.Context
 import android.content.Intent
 import android.net.Uri
@@ -12,7 +13,13 @@ import androidx.activity.compose.BackHandler
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.compose.setContent
 import androidx.activity.enableEdgeToEdge
+import androidx.activity.result.IntentSenderRequest
 import androidx.activity.result.contract.ActivityResultContracts
+import br.com.celularsaudavel.data.BackupRow
+import br.com.celularsaudavel.data.DriveRepository
+import br.com.celularsaudavel.ui.screens.FolderCategoryScreen
+import br.com.celularsaudavel.ui.screens.FoldersScreen
+import com.google.android.gms.auth.api.identity.Identity
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.padding
@@ -153,6 +160,98 @@ fun AppRoot(vm: MainViewModel = viewModel()) {
         }
     }
 
+    // ---------- Pastas (acesso a todos os arquivos) ----------
+    val legacyFilesLauncher = rememberLauncherForActivityResult(
+        ActivityResultContracts.RequestMultiplePermissions()
+    ) {
+        vm.refreshBasics()
+        vm.loadFolders(withBiggest = true)
+    }
+    val requestFolders: () -> Unit = {
+        if (Build.VERSION.SDK_INT >= 30) {
+            try {
+                context.startActivity(
+                    Intent(Settings.ACTION_MANAGE_APP_ALL_FILES_ACCESS_PERMISSION, Uri.parse("package:${context.packageName}"))
+                )
+            } catch (_: Exception) {
+                context.safeStart(Intent(Settings.ACTION_MANAGE_ALL_FILES_ACCESS_PERMISSION))
+            }
+        } else {
+            legacyFilesLauncher.launch(
+                arrayOf(Manifest.permission.READ_EXTERNAL_STORAGE, Manifest.permission.WRITE_EXTERNAL_STORAGE)
+            )
+        }
+    }
+
+    // ---------- Google Drive ----------
+    fun driveError(e: Exception?): String =
+        "O Google não autorizou a conexão${e?.message?.let { " ($it)" } ?: ""}. Confira no Google Cloud: API do Drive ativada, " +
+            "cliente Android com o pacote br.com.celularsaudavel e o SHA-1 certo, e sua conta como usuário de teste."
+    val driveLauncher = rememberLauncherForActivityResult(
+        ActivityResultContracts.StartIntentSenderForResult()
+    ) { r ->
+        val data = r.data
+        if (r.resultCode == Activity.RESULT_OK && data != null) {
+            try {
+                val res = Identity.getAuthorizationClient(context).getAuthorizationResultFromIntent(data)
+                vm.onDriveAuthorized(res.accessToken)
+            } catch (e: Exception) {
+                vm.onDriveError(driveError(e))
+            }
+        } else {
+            vm.onDriveError("A conexão foi cancelada.")
+        }
+    }
+    val connectDrive: () -> Unit = {
+        vm.onDriveConnecting()
+        try {
+            Identity.getAuthorizationClient(context).authorize(DriveRepository.authRequest())
+                .addOnSuccessListener { res ->
+                    if (res.hasResolution()) {
+                        val pi = res.pendingIntent
+                        if (pi != null) driveLauncher.launch(IntentSenderRequest.Builder(pi.intentSender).build())
+                        else vm.onDriveError(driveError(null))
+                    } else {
+                        vm.onDriveAuthorized(res.accessToken)
+                    }
+                }
+                .addOnFailureListener { e -> vm.onDriveError(driveError(e)) }
+        } catch (e: Exception) {
+            vm.onDriveError(driveError(e))
+        }
+    }
+    var pendingStart by remember { mutableStateOf<Pair<Set<String>, Boolean>?>(null) }
+    val notifLauncher = rememberLauncherForActivityResult(ActivityResultContracts.RequestPermission()) {
+        pendingStart?.let { (cats, wifi) -> vm.startBackup(cats, wifi) }
+        pendingStart = null
+    }
+    val startBackup: (Set<String>, Boolean) -> Unit = { cats, wifi ->
+        if (Build.VERSION.SDK_INT >= 33 &&
+            context.checkSelfPermission(Manifest.permission.POST_NOTIFICATIONS) != android.content.pm.PackageManager.PERMISSION_GRANTED
+        ) {
+            pendingStart = cats to wifi
+            notifLauncher.launch(Manifest.permission.POST_NOTIFICATIONS)
+        } else {
+            vm.startBackup(cats, wifi)
+        }
+    }
+    var pendingFree by remember { mutableStateOf<List<BackupRow>>(emptyList()) }
+    val freeLauncher = rememberLauncherForActivityResult(
+        ActivityResultContracts.StartIntentSenderForResult()
+    ) { r ->
+        if (r.resultCode == Activity.RESULT_OK) vm.onFreed(pendingFree)
+        pendingFree = emptyList()
+    }
+    val freeSpace: () -> Unit = {
+        val (sender, rows) = vm.freeRequest()
+        if (sender != null) {
+            pendingFree = rows
+            freeLauncher.launch(IntentSenderRequest.Builder(sender).build())
+        } else {
+            vm.onDriveError("Não consegui abrir a confirmação do Android (é preciso Android 11 ou mais novo).")
+        }
+    }
+
     LaunchedEffect(tab) {
         if (tab == TAB_APPS && !vm.state.value.appsLoaded && !vm.state.value.appsLoading) vm.loadApps()
     }
@@ -197,6 +296,25 @@ fun AppRoot(vm: MainViewModel = viewModel()) {
                     makeRequest = vm::deleteRequest,
                     onRemoved = { vm.onMediaRemoved(HistoryType.DUPLICATES_REMOVED, it) }
                 )
+                sub == "seq" -> DuplicatesScreen(
+                    state, onBack = { sub = null },
+                    makeRequest = vm::trashRequest,
+                    onRemoved = { vm.onMediaRemoved(HistoryType.SEQUENCE_TRASHED, it) },
+                    groups = state.sequences,
+                    title = "Fotos em sequência",
+                    subtitle = "Fotos da câmera tiradas com poucos segundos de diferença. Toque nas que não quer; fique com a melhor de cada grupo.",
+                    preselect = false,
+                    toTrash = true
+                )
+                sub == "shots" -> LargeVideosScreen(
+                    state, onBack = { sub = null },
+                    makeRequest = vm::trashRequest,
+                    onRemoved = { vm.onMediaRemoved(HistoryType.SCREENSHOTS_TRASHED, it) },
+                    videos = state.screenshots,
+                    title = "Capturas de tela",
+                    subtitle = "Prints guardados, dos mais novos para os mais antigos.",
+                    noun = "prints"
+                )
                 sub == "videos" -> LargeVideosScreen(
                     state, onBack = { sub = null },
                     makeRequest = vm::trashRequest,
@@ -210,12 +328,24 @@ fun AppRoot(vm: MainViewModel = viewModel()) {
                     onDeleted = { vm.onMediaRemoved(HistoryType.TRASH_DELETED, it) },
                     onRestored = vm::onTrashRestored
                 )
+                sub == "folders" -> FoldersScreen(
+                    state, onBack = { sub = null },
+                    onLoad = { vm.loadFolders(withBiggest = true) },
+                    onOpenCategory = { id -> sub = "folder:$id" },
+                    onRequestFolders = requestFolders
+                )
+                sub?.startsWith("folder:") == true -> FolderCategoryScreen(
+                    state, categoryId = sub!!.removePrefix("folder:"),
+                    onBack = { sub = "folders" },
+                    onDelete = vm::deleteFolderFiles
+                )
                 sub == "history" -> HistoryScreen(state, onBack = { sub = null })
                 sub == "perms" -> PermissionsScreen(
                     state, onBack = { sub = null },
                     onRequestMedia = requestMedia,
                     onOpenAppSettings = openAppSettings,
-                    onOpenUsageSettings = openUsage
+                    onOpenUsageSettings = openUsage,
+                    onRequestFolders = requestFolders
                 )
                 sub == "privacy" -> PrivacyScreen(onBack = { sub = null })
 
@@ -226,6 +356,8 @@ fun AppRoot(vm: MainViewModel = viewModel()) {
                     onOpenDuplicates = { go(TAB_CLEAN, "dups") },
                     onOpenVideos = { go(TAB_CLEAN, "videos") },
                     onOpenTrash = { go(TAB_CLEAN, "trash") },
+                    onOpenFolders = { go(TAB_CLEAN, "folders") },
+                    onRequestFolders = requestFolders,
                     onOpenApps = { openApps(SORT_SIZE) },
                     onOpenUnused = { openApps(SORT_UNUSED) },
                     onOpenCache = { openApps(SORT_CACHE) },
@@ -238,13 +370,22 @@ fun AppRoot(vm: MainViewModel = viewModel()) {
                 tab == TAB_CLEAN -> CleanScreen(
                     state,
                     onScan = scan,
-                    onOpenDuplicates = { sub = "dups" },
-                    onOpenVideos = { sub = "videos" },
-                    onOpenTrash = { sub = "trash" },
+                    onOpen = { id -> sub = id },
                     onOpenApps = { openApps(SORT_UNUSED) },
                     onOpenCache = { openApps(SORT_CACHE) },
+                    onRequestFolders = requestFolders,
                 )
-                tab == TAB_BACKUP -> BackupScreen(state, onScan = scan)
+                tab == TAB_BACKUP -> BackupScreen(
+                    state,
+                    onScan = scan,
+                    onConnect = connectDrive,
+                    onDisconnect = vm::disconnectDrive,
+                    onStart = startBackup,
+                    onStop = vm::stopBackup,
+                    onRetry = vm::retryFailed,
+                    onFree = freeSpace,
+                    onRefresh = vm::loadDriveAccount,
+                )
                 tab == TAB_APPS -> AppsScreen(
                     state,
                     initialSort = appsSort,

@@ -36,11 +36,10 @@ private val canRemove = Build.VERSION.SDK_INT >= 30
 fun CleanScreen(
     state: UiState,
     onScan: () -> Unit,
-    onOpenDuplicates: () -> Unit,
-    onOpenVideos: () -> Unit,
-    onOpenTrash: () -> Unit,
+    onOpen: (String) -> Unit,
     onOpenApps: () -> Unit,
     onOpenCache: () -> Unit,
+    onRequestFolders: () -> Unit,
 ) {
     LazyColumn(
         modifier = Modifier.fillMaxSize(),
@@ -62,18 +61,33 @@ fun CleanScreen(
                 }
             }
         } else {
+            item { SectionTitle("Galeria") }
             item {
                 RowCard(
                     "🖼️", "Duplicadas",
                     if (state.duplicateCount > 0) "${formatCount(state.duplicateCount)} cópias · ${formatBytes(state.duplicateBytes)}" else "Nenhuma cópia encontrada",
-                    onClick = onOpenDuplicates
+                    onClick = { onOpen("dups") }
+                )
+            }
+            item {
+                RowCard(
+                    "📷", "Fotos em sequência",
+                    if (state.sequences.isNotEmpty()) "${state.sequences.size} grupos · ${formatCount(state.sequenceCount)} fotos parecidas" else "Nenhuma sequência encontrada",
+                    onClick = { onOpen("seq") }
+                )
+            }
+            item {
+                RowCard(
+                    "📱", "Capturas de tela",
+                    if (state.screenshots.isNotEmpty()) "${formatCount(state.screenshots.size)} prints · ${formatBytes(state.screenshotBytes)}" else "Nenhuma captura de tela",
+                    onClick = { onOpen("shots") }
                 )
             }
             item {
                 RowCard(
                     "🎥", "Vídeos grandes",
                     if (state.largeVideos.isNotEmpty()) "${state.largeVideos.size} vídeos · ${formatBytes(state.largeVideoBytes)}" else "Nenhum vídeo acima de 100 MB",
-                    onClick = onOpenVideos
+                    onClick = { onOpen("videos") }
                 )
             }
             item {
@@ -84,9 +98,32 @@ fun CleanScreen(
                         state.trash.isEmpty() -> "Vazia"
                         else -> "${formatCount(state.trash.size)} itens · ${formatBytes(state.trashBytes)}"
                     },
-                    onClick = onOpenTrash
+                    onClick = { onOpen("trash") }
                 )
             }
+
+            item { SectionTitle("Pastas: WhatsApp, Downloads e temporários") }
+            if (!state.folderAccess) {
+                item {
+                    Notice(
+                        "O WhatsApp, os Downloads e os temporários ficam em pastas que a permissão de fotos não mostra, algumas ocultas. " +
+                            "Para analisar e limpar, libere o \"Acesso a todos os arquivos\".",
+                        action = "Liberar acesso às pastas",
+                        onAction = onRequestFolders
+                    )
+                }
+            } else {
+                item {
+                    RowCard(
+                        "📂", "Pastas e arquivos ocultos",
+                        if (state.folders.isEmpty()) "Nada encontrado" else
+                            "${formatBytes(state.folders.sumOf { it.bytes })} · ${formatBytes(state.safeFolderBytes)} podem ir sem medo",
+                        onClick = { onOpen("folders") }
+                    )
+                }
+            }
+
+            item { SectionTitle("Aplicativos") }
             item {
                 RowCard(
                     "🧽", "Cache dos aplicativos",
@@ -96,7 +133,7 @@ fun CleanScreen(
             }
             item {
                 RowCard(
-                    "📱", "Aplicativos pouco usados",
+                    "💤", "Aplicativos pouco usados",
                     if (state.usageAccess) "${state.unusedApps.size} apps · ${formatBytes(state.unusedAppsBytes)}" else "Precisa do acesso de uso",
                     onClick = onOpenApps
                 )
@@ -110,16 +147,21 @@ fun CleanScreen(
                     Text("PROTEGER → VERIFICAR → LIBERAR", color = CS.Green, fontWeight = FontWeight.SemiBold)
                     Spacer(Modifier.height(6.dp))
                     Text(
-                        "Nesta versão de teste o backup ainda não está ativo. Por isso o app só apaga cópias duplicadas (o original fica) e manda vídeos para a lixeira, de onde podem voltar.",
+                        "Fotos e vídeos sem backup vão para a lixeira, de onde podem voltar. Depois do backup verificado no Google Drive, a aba Backup libera o espaço com segurança.",
                         color = CS.Green, fontSize = 13.sp, lineHeight = 18.sp
                     )
                 }
             }
         }
         if (!canRemove) {
-            item { Notice("A remoção pelo app exige Android 11 ou mais novo. Aqui você pode revisar e apagar pela Galeria.") }
+            item { Notice("A remoção de fotos pelo app exige Android 11 ou mais novo. Aqui você pode revisar e apagar pela Galeria.") }
         }
     }
+}
+
+@Composable
+fun SectionTitle(text: String) {
+    Text(text, fontSize = 18.sp, fontWeight = FontWeight.Bold, color = CS.Ink, modifier = Modifier.padding(top = 8.dp))
 }
 
 // ---------------- Duplicadas ----------------
@@ -130,10 +172,14 @@ fun DuplicatesScreen(
     onBack: () -> Unit,
     makeRequest: (List<Uri>) -> IntentSender?,
     onRemoved: (List<MediaFile>) -> Unit,
+    groups: List<br.com.celularsaudavel.model.DuplicateGroup> = state.duplicates,
+    title: String = "Duplicadas",
+    subtitle: String = "Arquivos com conteúdo idêntico. Em cada grupo pelo menos um fica guardado.",
+    preselect: Boolean = true,
+    toTrash: Boolean = false,
 ) {
-    val groups = state.duplicates
     var selected by remember(groups) {
-        mutableStateOf(groups.flatMap { g -> g.copies.map { it.uri } }.toSet())
+        mutableStateOf(if (preselect) groups.flatMap { g -> g.copies.map { it.uri } }.toSet() else emptySet())
     }
     var hint by remember { mutableStateOf<String?>(null) }
     var confirm by remember { mutableStateOf(false) }
@@ -154,11 +200,7 @@ fun DuplicatesScreen(
             verticalArrangement = ListSpacing
         ) {
             item {
-                ScreenHeader(
-                    "Duplicadas",
-                    "Arquivos com conteúdo idêntico. Em cada grupo pelo menos um fica guardado.",
-                    onBack
-                )
+                ScreenHeader(title, subtitle, onBack)
             }
             if (groups.isEmpty()) {
                 item { Notice("Nenhuma cópia encontrada. 👏", soft = false) }
@@ -168,7 +210,7 @@ fun DuplicatesScreen(
                 CsCard {
                     Column {
                         Text(
-                            "${g.files.size} iguais · ${formatBytes(g.original.sizeBytes)} cada",
+                            if (toTrash) "${g.files.size} fotos · ${formatBytes(g.files.sumOf { it.sizeBytes })}" else "${g.files.size} iguais · ${formatBytes(g.original.sizeBytes)} cada",
                             fontWeight = FontWeight.SemiBold, color = CS.Ink
                         )
                         Text(g.original.name, color = CS.Muted, fontSize = 13.sp, maxLines = 1, overflow = TextOverflow.Ellipsis)
@@ -213,7 +255,7 @@ fun DuplicatesScreen(
                                     }
                                     Spacer(Modifier.height(4.dp))
                                     Text(
-                                        if (index == 0) "mais antigo" else formatDate(f.dateModifiedSec * 1000),
+                                        if (toTrash) formatBytes(f.sizeBytes) else if (index == 0) "mais antigo" else formatDate(f.dateModifiedSec * 1000),
                                         fontSize = 11.sp, color = CS.Muted
                                     )
                                 }
@@ -228,7 +270,7 @@ fun DuplicatesScreen(
                 Text("Toque nas fotos para escolher o que apagar.", color = CS.Muted, fontSize = 13.sp)
                 Spacer(Modifier.height(10.dp))
                 PrimaryButton(
-                    "Apagar ${chosen.size} cópias · ${formatBytes(chosenBytes)}",
+                    (if (toTrash) "Mover ${chosen.size} para a lixeira · " else "Apagar ${chosen.size} cópias · ") + formatBytes(chosenBytes),
                     onClick = { confirm = true },
                     enabled = chosen.isNotEmpty() && canRemove
                 )
@@ -239,10 +281,11 @@ fun DuplicatesScreen(
     if (confirm) {
         AlertDialog(
             onDismissRequest = { confirm = false },
-            title = { Text("Confirme a liberação") },
+            title = { Text(if (toTrash) "Mover para a lixeira?" else "Confirme a liberação") },
             text = {
                 Text(
-                    "${chosen.size} cópias (${formatBytes(chosenBytes)}) serão apagadas deste celular. " +
+                    if (toTrash) "${chosen.size} fotos (${formatBytes(chosenBytes)}) vão para a lixeira. Em cada grupo pelo menos uma fica. Dá para restaurar pela Lixeira por uns 30 dias."
+                    else "${chosen.size} cópias (${formatBytes(chosenBytes)}) serão apagadas deste celular. " +
                         "Em cada grupo, pelo menos um arquivo idêntico continua guardado. " +
                         "O Android vai pedir uma confirmação final."
                 )
@@ -270,8 +313,11 @@ fun LargeVideosScreen(
     onBack: () -> Unit,
     makeRequest: (List<Uri>) -> IntentSender?,
     onRemoved: (List<MediaFile>) -> Unit,
+    videos: List<MediaFile> = state.largeVideos,
+    title: String = "Vídeos grandes",
+    subtitle: String = "Acima de 100 MB, do maior para o menor.",
+    noun: String = "vídeos",
 ) {
-    val videos = state.largeVideos
     var selected by remember(videos) { mutableStateOf(emptySet<Uri>()) }
     var confirm by remember { mutableStateOf(false) }
     var pending by remember { mutableStateOf<List<MediaFile>>(emptyList()) }
@@ -290,11 +336,18 @@ fun LargeVideosScreen(
             contentPadding = PaddingValues(20.dp),
             verticalArrangement = Arrangement.spacedBy(10.dp)
         ) {
-            item { ScreenHeader("Vídeos grandes", "Acima de 100 MB, do maior para o menor.", onBack) }
+            item { ScreenHeader(title, subtitle, onBack) }
             item {
-                Notice("Esses vídeos ainda não têm backup. Por segurança eles vão para a lixeira do sistema e podem ser recuperados por cerca de 30 dias.")
+                Notice("Por segurança, o que você escolher vai para a lixeira do sistema e pode ser recuperado por cerca de 30 dias.")
             }
-            if (videos.isEmpty()) item { Notice("Nenhum vídeo grande encontrado. 👏", soft = false) }
+            if (videos.isNotEmpty()) {
+                item {
+                    TextButton(onClick = {
+                        selected = if (selected.size == videos.size) emptySet() else videos.map { it.uri }.toSet()
+                    }) { Text(if (selected.size == videos.size) "Desmarcar todos" else "Marcar todos (${videos.size})", color = CS.Ink) }
+                }
+            }
+            if (videos.isEmpty()) item { Notice("Nada encontrado aqui. 👏", soft = false) }
             items(videos, key = { it.uri.toString() }) { v ->
                 val isSel = v.uri in selected
                 CsCard(onClick = { selected = if (isSel) selected - v.uri else selected + v.uri }) {
@@ -318,7 +371,7 @@ fun LargeVideosScreen(
         if (videos.isNotEmpty()) {
             Column(Modifier.background(CS.Surface).padding(20.dp)) {
                 PrimaryButton(
-                    if (chosen.isEmpty()) "Selecione os vídeos" else "Mover ${chosen.size} para a lixeira · ${formatBytes(chosenBytes)}",
+                    if (chosen.isEmpty()) "Selecione os $noun" else "Mover ${chosen.size} para a lixeira · ${formatBytes(chosenBytes)}",
                     onClick = { confirm = true },
                     enabled = chosen.isNotEmpty() && canRemove
                 )
@@ -332,9 +385,9 @@ fun LargeVideosScreen(
             title = { Text("Mover para a lixeira?") },
             text = {
                 Text(
-                    "${chosen.size} vídeos (${formatBytes(chosenBytes)}) vão para a lixeira do sistema. " +
-                        "Eles ainda não têm backup verificado. O espaço é liberado de vez quando a lixeira for esvaziada " +
-                        "(automaticamente após cerca de 30 dias ou pelo app de galeria)."
+                    "${chosen.size} $noun (${formatBytes(chosenBytes)}) vão para a lixeira do sistema. " +
+                        "O espaço é liberado de vez quando você esvaziar a lixeira aqui no app " +
+                        "ou automaticamente depois de uns 30 dias."
                 )
             },
             confirmButton = {

@@ -30,6 +30,8 @@ fun HomeScreen(
     onOpenDuplicates: () -> Unit,
     onOpenVideos: () -> Unit,
     onOpenTrash: () -> Unit,
+    onOpenFolders: () -> Unit,
+    onRequestFolders: () -> Unit,
     onOpenApps: () -> Unit,
     onOpenUnused: () -> Unit,
     onOpenCache: () -> Unit,
@@ -94,6 +96,14 @@ fun HomeScreen(
                                 )
                                 Spacer(Modifier.height(12.dp))
                                 PrimaryButton("Ver recomendações", onOpenClean)
+                            } else if ((state.storage?.usedFraction ?: 0f) > 0.7f) {
+                                Text(
+                                    "O índice caiu porque o armazenamento está ${((state.storage?.usedFraction ?: 0f) * 100).toInt()}% ocupado. " +
+                                        "Veja as pastas ocultas e o cache dos apps para achar onde está o espaço.",
+                                    fontSize = 15.sp, color = CS.Ink, lineHeight = 21.sp
+                                )
+                                Spacer(Modifier.height(12.dp))
+                                PrimaryButton("Ver onde está o espaço", onOpenClean)
                             } else {
                                 Text("Nada para revisar agora. 👏", fontSize = 16.sp, color = CS.Ink)
                             }
@@ -162,7 +172,8 @@ fun HomeScreen(
                             LegendDot(
                                 ColorOther,
                                 if (state.appsBytes != null) "Sistema e outros" else "Apps, sistema e outros",
-                                formatBytes(other)
+                                formatBytes(other),
+                                onOpenFolders
                             )
                         }
                     }
@@ -200,6 +211,30 @@ fun HomeScreen(
                     else "Nenhum vídeo acima de 100 MB",
                     onClick = onOpenVideos
                 )
+            }
+            if (!state.folderAccess) {
+                item {
+                    Notice(
+                        "Boa parte do espaço pode estar em pastas ocultas do WhatsApp, Downloads e temporários. Libere o acesso para analisar.",
+                        action = "Liberar acesso às pastas",
+                        onAction = onRequestFolders
+                    )
+                }
+            } else if (state.folders.isNotEmpty()) {
+                if (state.safeFolderBytes > 0) {
+                    item {
+                        RowCard(
+                            "🧹", "Temporários e sobras",
+                            "${formatBytes(state.safeFolderBytes)} que podem ir sem medo",
+                            onClick = onOpenFolders
+                        )
+                    }
+                }
+                if (state.whatsappBytes > 0) {
+                    item {
+                        RowCard("💬", "WhatsApp", "${formatBytes(state.whatsappBytes)} em fotos, vídeos, áudios e status", onClick = onOpenFolders)
+                    }
+                }
             }
             if (state.trash.isNotEmpty()) {
                 item {

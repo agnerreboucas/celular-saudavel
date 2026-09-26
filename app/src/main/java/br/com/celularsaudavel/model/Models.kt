@@ -25,8 +25,27 @@ data class MediaFile(
     val dateModifiedSec: Long,
     val isVideo: Boolean,
     /** Só para itens na lixeira: quando o Android apaga sozinho (segundos). */
-    val expiresSec: Long = 0
+    val expiresSec: Long = 0,
+    /** Pasta relativa, ex.: "DCIM/Camera/" */
+    val folder: String = "",
+    val dateTakenMs: Long = 0
 )
+
+/** Arquivo comum (fora da galeria), lido com "acesso a todos os arquivos". */
+data class LocalFile(val path: String, val name: String, val sizeBytes: Long, val modifiedMs: Long)
+
+data class FolderCategory(
+    val id: String,
+    val emoji: String,
+    val title: String,
+    val description: String,
+    /** true = pode apagar sem medo (temporários, status vistos, instaladores) */
+    val safe: Boolean,
+    val group: String,
+    val files: List<LocalFile>
+) {
+    val bytes: Long get() = files.sumOf { it.sizeBytes }
+}
 
 /** Arquivos com conteúdo idêntico. O primeiro (mais antigo) é tratado como original. */
 data class DuplicateGroup(val files: List<MediaFile>) {
@@ -56,7 +75,11 @@ enum class HistoryType(val label: String) {
     DUPLICATES_REMOVED("Duplicadas removidas"),
     VIDEOS_TRASHED("Vídeos enviados à lixeira"),
     APP_UNINSTALLED("Aplicativo desinstalado"),
-    TRASH_DELETED("Apagados da lixeira")
+    TRASH_DELETED("Apagados da lixeira"),
+    FILES_DELETED("Arquivos de pastas apagados"),
+    SEQUENCE_TRASHED("Fotos em sequência na lixeira"),
+    SCREENSHOTS_TRASHED("Capturas de tela na lixeira"),
+    BACKUP_FREED("Liberados após backup verificado")
 }
 
 data class HistoryEntry(
