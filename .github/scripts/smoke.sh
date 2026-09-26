@@ -18,7 +18,16 @@ adb shell 'am broadcast -a android.intent.action.MEDIA_SCANNER_SCAN_FILE -d file
 adb logcat -c
 adb shell monkey -p $PKG -c android.intent.category.LAUNCHER 1
 sleep 15
-# abre a análise tocando no botão principal por texto (uiautomator) e depois toques aleatórios
+# toca em "Analisar meu celular" (procura o botão na tela) e espera a análise
+tap_text() {
+  adb shell uiautomator dump /sdcard/ui.xml >/dev/null 2>&1
+  B=$(adb shell cat /sdcard/ui.xml | tr '>' '\n' | grep -m1 "text=\"$1" | sed -E 's/.*bounds="\[([0-9]+),([0-9]+)\]\[([0-9]+),([0-9]+)\]".*/\1 \2 \3 \4/')
+  if [ -n "$B" ]; then set -- $B; adb shell input tap $(( ($1+$3)/2 )) $(( ($2+$4)/2 )); echo "tocou"; else echo "nao achou"; fi
+}
+tap_text "Analisar meu celular"
+sleep 40
+adb shell pidof $PKG || echo "CAIU DEPOIS DA ANALISE"
+# depois toques aleatórios
 adb shell monkey -p $PKG --pct-syskeys 0 --pct-appswitch 0 --throttle 300 -s 42 -v 600 || true
 sleep 5
 adb logcat -d > logcat.txt

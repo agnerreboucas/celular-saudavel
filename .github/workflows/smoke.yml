@@ -5,6 +5,9 @@ on:
     branches: [main]
   workflow_dispatch:
 
+permissions:
+  contents: write
+
 jobs:
   smoke:
     runs-on: ubuntu-latest
@@ -43,6 +46,17 @@ jobs:
         run: |
           echo "===== RESUMO API ${{ matrix.api }} ====="
           cat smoke-result.txt 2>/dev/null || echo "sem resultado"
+      - name: Publicar resumo
+        if: always()
+        run: cp smoke-result.txt smoke-api-${{ matrix.api }}.txt 2>/dev/null || echo "sem resultado" > smoke-api-${{ matrix.api }}.txt
+      - uses: softprops/action-gh-release@v2
+        if: always()
+        with:
+          tag_name: smoke-${{ github.run_number }}
+          name: Teste em emuladores ${{ github.run_number }}
+          prerelease: true
+          make_latest: false
+          files: smoke-api-${{ matrix.api }}.txt
       - uses: actions/upload-artifact@v4
         if: always()
         with:
