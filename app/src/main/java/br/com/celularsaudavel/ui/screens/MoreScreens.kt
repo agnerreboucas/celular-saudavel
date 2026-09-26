@@ -23,6 +23,7 @@ fun MoreScreen(
     onOpenHistory: () -> Unit,
     onOpenPermissions: () -> Unit,
     onOpenPrivacy: () -> Unit,
+    onOpenMonitor: () -> Unit,
 ) {
     LazyColumn(
         modifier = Modifier.fillMaxSize(),
@@ -35,6 +36,13 @@ fun MoreScreen(
                 "📊", "Histórico",
                 if (state.history.isEmpty()) "Nenhuma ação ainda" else "${formatBytes(state.totalFreed)} liberados até agora",
                 onClick = onOpenHistory
+            )
+        }
+        item {
+            RowCard(
+                "🔔", "Acompanhamento",
+                if (state.monitor.enabled) "Ligado · avisos de espaço e check-up semanal" else "Desligado",
+                onClick = onOpenMonitor
             )
         }
         item { RowCard("🔐", "Permissões", "Veja e ajuste o que o app pode acessar", onClick = onOpenPermissions) }
@@ -202,5 +210,88 @@ fun PrivacyScreen(onBack: () -> Unit) {
                 }
             }
         }
+    }
+}
+
+@Composable
+fun MonitorScreen(
+    state: UiState,
+    onBack: () -> Unit,
+    onSet: (enabled: Boolean?, storage: Boolean?, weekly: Boolean?, backup: Boolean?) -> Unit,
+    onAllowNotifications: () -> Unit,
+    onTest: () -> Unit,
+) {
+    val m = state.monitor
+    LazyColumn(
+        modifier = Modifier.fillMaxSize(),
+        contentPadding = PaddingValues(20.dp),
+        verticalArrangement = ListSpacing
+    ) {
+        item {
+            ScreenHeader(
+                "Acompanhamento",
+                "O app acompanha a saúde do celular em segundo plano e avisa só quando importa.",
+                onBack
+            )
+        }
+        if (!m.canNotify) {
+            item {
+                Notice(
+                    "As notificações estão bloqueadas para o Celular Saudável. Sem elas, os avisos não aparecem.",
+                    action = "Permitir notificações",
+                    onAction = onAllowNotifications
+                )
+            }
+        }
+        item {
+            CsCard {
+                Column {
+                    SwitchRow("Acompanhamento ligado", "Checa o celular duas vezes por dia, sem gastar bateria.", m.enabled) {
+                        onSet(it, null, null, null)
+                    }
+                    if (m.enabled) {
+                        HorizontalDivider(Modifier.padding(vertical = 8.dp), color = CS.Surface2)
+                        SwitchRow("Avisos de espaço", "Quando passar de 80%, 90% e 95% ocupado. Um aviso por faixa.", m.storageAlerts) {
+                            onSet(null, it, null, null)
+                        }
+                        HorizontalDivider(Modifier.padding(vertical = 8.dp), color = CS.Surface2)
+                        SwitchRow("Check-up semanal", "Índice de saúde, espaço livre e quanto o celular encheu na semana.", m.weeklyCheckup) {
+                            onSet(null, null, it, null)
+                        }
+                        HorizontalDivider(Modifier.padding(vertical = 8.dp), color = CS.Surface2)
+                        SwitchRow("Lembrete de backup", "Se o último backup no Drive tiver mais de 30 dias.", m.backupReminder) {
+                            onSet(null, null, null, it)
+                        }
+                    }
+                }
+            }
+        }
+        item {
+            OutlinedButton(onClick = onTest, modifier = Modifier.fillMaxWidth()) {
+                Text("Fazer um check-up agora e notificar", color = CS.Ink)
+            }
+        }
+        item {
+            Text(
+                "Sem alarmes falsos: o app nunca diz que o celular está \"em perigo\" nem pede para limpar o que não precisa.",
+                color = CS.Muted, fontSize = 12.sp
+            )
+        }
+    }
+}
+
+@Composable
+private fun SwitchRow(title: String, desc: String, checked: Boolean, onChange: (Boolean) -> Unit) {
+    Row(verticalAlignment = Alignment.CenterVertically) {
+        Column(Modifier.weight(1f)) {
+            Text(title, color = CS.Ink, fontWeight = FontWeight.SemiBold, fontSize = 15.sp)
+            Text(desc, color = CS.Muted, fontSize = 13.sp, lineHeight = 18.sp)
+        }
+        Spacer(Modifier.width(12.dp))
+        Switch(
+            checked = checked,
+            onCheckedChange = onChange,
+            colors = SwitchDefaults.colors(checkedTrackColor = CS.Green)
+        )
     }
 }

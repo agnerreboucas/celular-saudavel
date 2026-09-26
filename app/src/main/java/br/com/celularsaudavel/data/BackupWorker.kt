@@ -100,6 +100,7 @@ class BackupWorker(ctx: Context, params: WorkerParameters) : CoroutineWorker(ctx
                         val r = drive.upload(Uri.parse(row.uri), row.name, row.mime, parent)
                         if (r.verified) {
                             db.mark(row.uri, BackupState.VERIFIED, driveId = r.driveId, md5 = r.localMd5)
+                            MonitorPrefs(applicationContext).lastBackupAt = System.currentTimeMillis()
                         } else {
                             db.mark(row.uri, BackupState.FAILED, driveId = r.driveId, error = "Conferência não bateu")
                         }

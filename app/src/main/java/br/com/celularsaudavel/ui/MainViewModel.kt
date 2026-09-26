@@ -16,7 +16,10 @@ import br.com.celularsaudavel.data.BackupWorker
 import br.com.celularsaudavel.data.DriveAccount
 import br.com.celularsaudavel.data.DriveRepository
 import br.com.celularsaudavel.data.FolderRepository
+import br.com.celularsaudavel.data.HealthMonitorWorker
+import br.com.celularsaudavel.data.HealthNotifier
 import br.com.celularsaudavel.data.HistoryStore
+import br.com.celularsaudavel.data.MonitorPrefs
 import br.com.celularsaudavel.data.MediaRepository
 import br.com.celularsaudavel.model.CategoryStat
 import br.com.celularsaudavel.model.DuplicateGroup
@@ -59,6 +62,14 @@ data class DriveUi(
     val toProtect: Map<String, CategoryStat> = emptyMap(),
 )
 
+data class MonitorUi(
+    val enabled: Boolean = true,
+    val storageAlerts: Boolean = true,
+    val weeklyCheckup: Boolean = true,
+    val backupReminder: Boolean = true,
+    val canNotify: Boolean = false,
+)
+
 data class UiState(
     val storage: StorageInfo? = null,
     val mediaAccess: MediaAccess = MediaAccess.NONE,
@@ -85,6 +96,7 @@ data class UiState(
     val apps: List<InstalledApp> = emptyList(),
 
     val drive: DriveUi = DriveUi(),
+    val monitor: MonitorUi = MonitorUi(),
     val history: List<HistoryEntry> = emptyList(),
 ) {
     val duplicateBytes: Long get() = duplicates.sumOf { it.wastedBytes }
@@ -128,6 +140,7 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
     private val historyStore = HistoryStore(app)
     private val drive = DriveRepository(app)
     private val backupDb = BackupDb(app)
+    private val monitorPrefs = MonitorPrefs(app)
 
     private var images: List<MediaFile> = emptyList()
     private var videos: List<MediaFile> = emptyList()
@@ -136,6 +149,7 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
     val state: StateFlow<UiState> = _state.asStateFlow()
 
     init {
+        if (monitorPrefs.enabled) HealthMonitorWorker.schedule(app)
         refreshBasics()
         _state.update { it.copy(drive = it.drive.copy(connected = drive.connected)) }
         viewModelScope.launch {
@@ -163,7 +177,10 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
             val history = historyStore.load()
             val before = _state.value
             _state.update {
-                it.copy(storage = storage, mediaAccess = access, usageAccess = usage, folderAccess = folders, history = history)
+                it.copy(
+                    storage = storage, mediaAccess = access, usageAccess = usage, folderAccess = folders, history = history,
+                    monitor = monitorUi()
+                )
             }
             if (usage != before.usageAccess && before.appsLoaded) loadApps()
             if (folders && !before.folderAccess && before.scanned) loadFolders()
@@ -325,6 +342,35 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
                     )
                 }
             }
+        }
+    }
+
+    // ---------------- Acompanhamento ----------------
+
+    private fun monitorUi() = MonitorUi(
+        enabled = monitorPrefs.enabled,
+        storageAlerts = monitorPrefs.storageAlerts,
+        weeklyCheckup = monitorPrefs.weeklyCheckup,
+        backupReminder = monitorPrefs.backupReminder,
+        canNotify = HealthNotifier.canNotify(getApplication())
+    )
+
+    fun setMonitor(enabled: Boolean? = null, storage: Boolean? = null, weekly: Boolean? = null, backup: Boolean? = null) {
+        enabled?.let {
+            monitorPrefs.enabled = it
+            if (it) HealthMonitorWorker.schedule(getApplication()) else HealthMonitorWorker.cancel(getApplication())
+        }
+        storage?.let { monitorPrefs.storageAlerts = it }
+        weekly?.let { monitorPrefs.weeklyCheckup = it }
+        backup?.let { monitorPrefs.backupReminder = it }
+        _state.update { it.copy(monitor = monitorUi()) }
+    }
+
+    fun refreshMonitor() = _state.update { it.copy(monitor = monitorUi()) }
+
+    fun testNotifications() {
+        viewModelScope.launch(Dispatchers.IO) {
+            HealthMonitorWorker.runChecks(getApplication(), force = true)
         }
     }
 

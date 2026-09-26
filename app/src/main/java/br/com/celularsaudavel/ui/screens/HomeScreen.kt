@@ -40,6 +40,7 @@ fun HomeScreen(
     onOpenAppSettings: (br.com.celularsaudavel.model.InstalledApp) -> Unit,
     onOpenBackup: () -> Unit,
     onOpenPermissions: () -> Unit,
+    onAllowNotifications: () -> Unit,
 ) {
     LazyColumn(
         modifier = Modifier.fillMaxSize(),
@@ -122,6 +123,17 @@ fun HomeScreen(
                         }
                     }
                 }
+            }
+        }
+
+        if (state.scanned && state.monitor.enabled && !state.monitor.canNotify) {
+            item {
+                Notice(
+                    "Quer que o app acompanhe a saúde do celular e avise quando o espaço estiver acabando?",
+                    soft = false,
+                    action = "Ativar avisos",
+                    onAction = onAllowNotifications
+                )
             }
         }
 

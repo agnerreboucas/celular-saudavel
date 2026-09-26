@@ -58,6 +58,7 @@ import br.com.celularsaudavel.ui.screens.DuplicatesScreen
 import br.com.celularsaudavel.ui.screens.HistoryScreen
 import br.com.celularsaudavel.ui.screens.HomeScreen
 import br.com.celularsaudavel.ui.screens.LargeVideosScreen
+import br.com.celularsaudavel.ui.screens.MonitorScreen
 import br.com.celularsaudavel.ui.screens.MoreScreen
 import br.com.celularsaudavel.ui.screens.PermissionsScreen
 import br.com.celularsaudavel.ui.screens.PrivacyScreen
@@ -252,6 +253,11 @@ fun AppRoot(vm: MainViewModel = viewModel()) {
         }
     }
 
+    val monitorNotifLauncher = rememberLauncherForActivityResult(ActivityResultContracts.RequestPermission()) { granted ->
+        if (!granted) openAppSettings()
+        vm.refreshMonitor()
+    }
+
     LaunchedEffect(tab) {
         if (tab == TAB_APPS && !vm.state.value.appsLoaded && !vm.state.value.appsLoading) vm.loadApps()
     }
@@ -348,6 +354,15 @@ fun AppRoot(vm: MainViewModel = viewModel()) {
                     onRequestFolders = requestFolders
                 )
                 sub == "privacy" -> PrivacyScreen(onBack = { sub = null })
+                sub == "monitor" -> MonitorScreen(
+                    state, onBack = { sub = null },
+                    onSet = { e, st, w, b -> vm.setMonitor(e, st, w, b) },
+                    onAllowNotifications = {
+                        if (Build.VERSION.SDK_INT >= 33) monitorNotifLauncher.launch(Manifest.permission.POST_NOTIFICATIONS)
+                        else openAppSettings()
+                    },
+                    onTest = vm::testNotifications
+                )
 
                 tab == TAB_HOME -> HomeScreen(
                     state,
@@ -366,6 +381,10 @@ fun AppRoot(vm: MainViewModel = viewModel()) {
                     onOpenAppSettings = openAppDetails,
                     onOpenBackup = { go(TAB_BACKUP, null) },
                     onOpenPermissions = { go(TAB_MORE, "perms") },
+                    onAllowNotifications = {
+                        if (Build.VERSION.SDK_INT >= 33) monitorNotifLauncher.launch(Manifest.permission.POST_NOTIFICATIONS)
+                        else openAppSettings()
+                    },
                 )
                 tab == TAB_CLEAN -> CleanScreen(
                     state,
@@ -399,6 +418,7 @@ fun AppRoot(vm: MainViewModel = viewModel()) {
                     onOpenHistory = { sub = "history" },
                     onOpenPermissions = { sub = "perms" },
                     onOpenPrivacy = { sub = "privacy" },
+                    onOpenMonitor = { sub = "monitor" },
                 )
             }
         }
