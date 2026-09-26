@@ -25,6 +25,7 @@ fun MoreScreen(
     onOpenPrivacy: () -> Unit,
     onOpenMonitor: () -> Unit,
     onOpenPremium: () -> Unit,
+    onOpenRecover: () -> Unit,
 ) {
     LazyColumn(
         modifier = Modifier.fillMaxSize(),
@@ -55,6 +56,7 @@ fun MoreScreen(
                 onClick = onOpenMonitor
             )
         }
+        item { RowCard("♻️", "Recuperar arquivos", "Volte atrás no que foi apagado pelo app", onClick = onOpenRecover) }
         item { RowCard("🔐", "Permissões", "Veja e ajuste o que o app pode acessar", onClick = onOpenPermissions) }
         item { RowCard("🛡️", "Privacidade", "O que o app faz (e não faz) com seus dados", onClick = onOpenPrivacy) }
         item {

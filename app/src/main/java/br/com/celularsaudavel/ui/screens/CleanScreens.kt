@@ -106,6 +106,9 @@ fun CleanScreen(
                     onClick = { onOpen("trash") }
                 )
             }
+            item {
+                RowCard("♻️", "Recuperar arquivos", "Desfaça o que foi apagado pelo app", onClick = { onOpen("recover") })
+            }
 
             if (state.foldersFeature) item { SectionTitle("Pastas: WhatsApp, Downloads e temporários") }
             if (!state.foldersFeature) {
@@ -342,6 +345,7 @@ fun LargeVideosScreen(
     title: String = "Vídeos grandes",
     subtitle: String = "Acima de 100 MB, do maior para o menor.",
     noun: String = "vídeos",
+    onPreview: (PreviewTarget) -> Unit = {},
 ) {
     var selected by remember(videos) { mutableStateOf(emptySet<String>()) }
     var mode by remember { mutableStateOf(SelMode.ONE) }
@@ -390,7 +394,14 @@ fun LargeVideosScreen(
                 val isSel = k in selected
                 CsCard(onClick = { selected = if (isSel) selected - k else selected + k }) {
                     Row(verticalAlignment = Alignment.CenterVertically) {
-                        MediaThumb(v.uri, Modifier.size(64.dp))
+                        MediaThumb(
+                            v.uri,
+                            Modifier
+                                .size(64.dp)
+                                .clickable {
+                                    onPreview(PreviewTarget(v.name, v.sizeBytes, v.dateModifiedSec * 1000, uri = v.uri, mime = v.mimeType, location = v.folder))
+                                }
+                        )
                         Spacer(Modifier.width(14.dp))
                         Column(Modifier.weight(1f)) {
                             Text(formatBytes(v.sizeBytes), fontWeight = FontWeight.SemiBold, color = CS.Ink, fontSize = 17.sp)
@@ -454,6 +465,7 @@ fun TrashScreen(
     restoreRequest: (List<Uri>) -> IntentSender?,
     onDeleted: (List<MediaFile>) -> Unit,
     onRestored: () -> Unit,
+    onPreview: (PreviewTarget) -> Unit = {},
 ) {
     LaunchedEffect(Unit) { onLoad() }
     val items = state.trash
@@ -521,7 +533,14 @@ fun TrashScreen(
                 val isSel = k in selected
                 CsCard(onClick = { selected = if (isSel) selected - k else selected + k }) {
                     Row(verticalAlignment = Alignment.CenterVertically) {
-                        MediaThumb(f.uri, Modifier.size(56.dp))
+                        MediaThumb(
+                            f.uri,
+                            Modifier
+                                .size(56.dp)
+                                .clickable {
+                                    onPreview(PreviewTarget(f.name, f.sizeBytes, f.dateModifiedSec * 1000, uri = f.uri, mime = f.mimeType))
+                                }
+                        )
                         Spacer(Modifier.width(14.dp))
                         Column(Modifier.weight(1f)) {
                             Text(formatBytes(f.sizeBytes), fontWeight = FontWeight.SemiBold, color = CS.Ink)

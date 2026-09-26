@@ -197,6 +197,7 @@ class HealthMonitorWorker(ctx: Context, params: WorkerParameters) : CoroutineWor
     }
 
     override suspend fun doWork(): Result {
+        runCatching { RecycleBin(applicationContext).purgeExpired(DriveRepository(applicationContext)) }
         return try {
             runChecks(applicationContext)
             Result.success()

@@ -70,6 +70,17 @@
             </intent-filter>
         </activity>
 
+        <!-- Abrir um arquivo em outro app (visualizar antes de apagar) -->
+        <provider
+            android:name="androidx.core.content.FileProvider"
+            android:authorities="${applicationId}.arquivos"
+            android:exported="false"
+            android:grantUriPermissions="true">
+            <meta-data
+                android:name="android.support.FILE_PROVIDER_PATHS"
+                android:resource="@xml/file_paths" />
+        </provider>
+
         <!-- Envio do backup em segundo plano com notificação -->
         <service
             android:name="androidx.work.impl.foreground.SystemForegroundService"

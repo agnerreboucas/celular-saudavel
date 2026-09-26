@@ -1,6 +1,10 @@
 package br.com.celularsaudavel.ui.screens
 
 import androidx.compose.foundation.background
+import androidx.compose.foundation.border
+import androidx.compose.foundation.clickable
+import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.ui.draw.clip
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
@@ -101,7 +105,9 @@ fun FolderCategoryScreen(
     state: UiState,
     categoryId: String,
     onBack: () -> Unit,
-    onDelete: (List<LocalFile>) -> Unit,
+    onDelete: (List<LocalFile>, DeleteMode) -> Unit,
+    onPreview: (PreviewTarget) -> Unit,
+    onOpenRecover: () -> Unit,
 ) {
     val cat = state.folders.firstOrNull { it.id == categoryId }
     val files = cat?.files ?: emptyList()
@@ -120,8 +126,11 @@ fun FolderCategoryScreen(
             verticalArrangement = Arrangement.spacedBy(8.dp)
         ) {
             item { ScreenHeader(cat?.title ?: "Pasta", cat?.description, onBack) }
+            if (files.isNotEmpty()) item {
+                Text("Toque num arquivo para ver o que é. Marque a caixa para selecionar.", color = CS.Muted, fontSize = 13.sp)
+            }
             if (cat != null && !cat.safe) {
-                item { Notice("Esses arquivos não vão para a lixeira: apagar aqui é definitivo. Se forem importantes, faça o backup antes.") }
+                item { Notice("Na hora de apagar você escolhe: guardar na Lixeira do app, guardar na nuvem ou apagar de vez. Na dúvida, guarde: dá para recuperar em Mais → Recuperar arquivos.") }
             }
             if (files.isEmpty()) {
                 item { Notice("Nada aqui. 👏", soft = false) }
@@ -151,8 +160,18 @@ fun FolderCategoryScreen(
                 selected = selected, onSelectedChange = { selected = it }
             ) { f ->
                 val isSel = f.path in selected
-                CsCard(onClick = { selected = if (isSel) selected - f.path else selected + f.path }) {
+                val preview = {
+                    onPreview(
+                        PreviewTarget(
+                            name = f.name, sizeBytes = f.sizeBytes, dateMs = f.modifiedMs, path = f.path,
+                            location = f.path.substringBeforeLast('/').substringAfter("/0/")
+                        )
+                    )
+                }
+                CsCard(onClick = preview) {
                     Row(verticalAlignment = Alignment.CenterVertically) {
+                        FileThumb(f.path, f.name, Modifier.size(48.dp))
+                        Spacer(Modifier.width(12.dp))
                         Column(Modifier.weight(1f)) {
                             Text(f.name, color = CS.Ink, fontSize = 14.sp, maxLines = 1, overflow = TextOverflow.Ellipsis)
                             Text(
@@ -185,22 +204,49 @@ fun FolderCategoryScreen(
     }
 
     if (confirm) {
+        val canCloud = state.premium && state.drive.connected
         AlertDialog(
             onDismissRequest = { confirm = false },
-            title = { Text("Apagar de vez?") },
+            title = { Text("Como apagar ${formatCount(chosen.size)} arquivos?") },
             text = {
-                Text(
-                    "${formatCount(chosen.size)} arquivos (${formatBytes(chosenBytes)}) serão apagados definitivamente. " +
-                        if (cat?.safe == true) "São arquivos que não fazem falta." else "Eles não vão para a lixeira e não têm backup pelo app."
-                )
+                Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
+                    Text("${formatBytes(chosenBytes)} selecionados.", fontWeight = FontWeight.SemiBold)
+                    DeleteOption(
+                        "☁️ Guardar na nuvem e liberar agora",
+                        if (canCloud) "Vão para o seu Google Drive e saem do celular. Recuperáveis por ${state.retentionDays} dias."
+                        else "Precisa do Premium e do Google Drive conectado.",
+                        enabled = canCloud
+                    ) { confirm = false; onDelete(chosen, DeleteMode.CLOUD_BIN) }
+                    DeleteOption(
+                        "🗂️ Guardar na Lixeira do app",
+                        "Recuperáveis por ${state.retentionDays} dias. Continuam ocupando espaço até você esvaziar.",
+                        enabled = true
+                    ) { confirm = false; onDelete(chosen, DeleteMode.PHONE_BIN) }
+                    DeleteOption(
+                        "🗑️ Apagar de vez",
+                        if (cat?.safe == true) "Libera o espaço agora. São arquivos que não fazem falta."
+                        else "Libera o espaço agora e NÃO tem como recuperar.",
+                        enabled = true
+                    ) { confirm = false; onDelete(chosen, DeleteMode.FOREVER) }
+                }
             },
-            confirmButton = {
-                TextButton(onClick = {
-                    confirm = false
-                    onDelete(chosen)
-                }) { Text("Apagar") }
-            },
+            confirmButton = {},
             dismissButton = { TextButton(onClick = { confirm = false }) { Text("Cancelar") } }
         )
+    }
+}
+
+@Composable
+private fun DeleteOption(title: String, desc: String, enabled: Boolean, onClick: () -> Unit) {
+    Column(
+        Modifier
+            .fillMaxWidth()
+            .clip(RoundedCornerShape(14.dp))
+            .border(1.dp, if (enabled) CS.Muted else CS.Surface2, RoundedCornerShape(14.dp))
+            .clickable(enabled = enabled, onClick = onClick)
+            .padding(12.dp)
+    ) {
+        Text(title, fontWeight = FontWeight.SemiBold, color = if (enabled) CS.Ink else CS.Muted)
+        Text(desc, fontSize = 13.sp, color = CS.Muted, lineHeight = 18.sp)
     }
 }

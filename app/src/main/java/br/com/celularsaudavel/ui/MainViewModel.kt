@@ -24,6 +24,8 @@ import br.com.celularsaudavel.data.HealthNotifier
 import br.com.celularsaudavel.data.HistoryStore
 import br.com.celularsaudavel.data.MonitorPrefs
 import br.com.celularsaudavel.data.MediaRepository
+import br.com.celularsaudavel.data.RecycleBin
+import br.com.celularsaudavel.data.RecycleItem
 import br.com.celularsaudavel.model.CategoryStat
 import br.com.celularsaudavel.model.DuplicateGroup
 import br.com.celularsaudavel.model.FolderCategory
@@ -76,6 +78,9 @@ data class MonitorUi(
 /** Resultado de uma limpeza, mostrado como comemoração. */
 data class Win(val bytes: Long, val count: Int, val what: String, val toTrash: Boolean = false)
 
+/** Como apagar arquivos de pastas. */
+enum class DeleteMode { PHONE_BIN, CLOUD_BIN, FOREVER }
+
 data class UiState(
     val storage: StorageInfo? = null,
     val mediaAccess: MediaAccess = MediaAccess.NONE,
@@ -111,6 +116,9 @@ data class UiState(
     /** Progresso de uma exclusão em lote (feitos, total). */
     val deleting: Pair<Int, Int>? = null,
     val avgPhotoBytes: Long = 0,
+    val recycle: List<RecycleItem> = emptyList(),
+    val retentionDays: Int = 90,
+    val recycleMessage: String? = null,
     val history: List<HistoryEntry> = emptyList(),
 ) {
     /** Versão completa (APK direto) libera tudo; na Play depende da assinatura. */
@@ -159,6 +167,7 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
     private val backupDb = BackupDb(app)
     private val monitorPrefs = MonitorPrefs(app)
     val billing = BillingRepository(app)
+    private val recycleBin = RecycleBin(app)
 
     private var images: List<MediaFile> = emptyList()
     private var videos: List<MediaFile> = emptyList()
@@ -291,14 +300,26 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
         }
     }
 
-    fun deleteFolderFiles(files: List<LocalFile>) {
+    fun deleteFolderFiles(files: List<LocalFile>, mode: DeleteMode = DeleteMode.FOREVER) {
         viewModelScope.launch(Dispatchers.IO) {
-            _state.update { it.copy(deleting = 0 to files.size) }
-            val deleted = folderRepo.delete(files) { done ->
-                _state.update { it.copy(deleting = done to files.size) }
+            _state.update { it.copy(deleting = 0 to files.size, recycleMessage = null) }
+            val progress: (Int) -> Unit = { done -> _state.update { it.copy(deleting = done to files.size) } }
+            val deleted = try {
+                when (mode) {
+                    DeleteMode.PHONE_BIN -> recycleBin.moveToPhoneBin(files, progress)
+                    DeleteMode.CLOUD_BIN -> recycleBin.moveToCloud(files, drive, progress)
+                    DeleteMode.FOREVER -> folderRepo.delete(files, progress)
+                }
+            } catch (e: Exception) {
+                _state.update { it.copy(recycleMessage = "Não consegui guardar na nuvem: ${e.message ?: "reconecte o Google Drive"}") }
+                emptyList()
             }
-            _state.update { it.copy(deleting = null) }
-            celebrate(deleted.sumOf { it.sizeBytes }, deleted.size, "arquivos de pastas")
+            _state.update { it.copy(deleting = null, recycle = recycleBin.list()) }
+            if (mode == DeleteMode.PHONE_BIN) {
+                celebrate(deleted.sumOf { it.sizeBytes }, deleted.size, "arquivos (na Lixeira do app)", toTrash = true)
+            } else {
+                celebrate(deleted.sumOf { it.sizeBytes }, deleted.size, if (mode == DeleteMode.CLOUD_BIN) "arquivos guardados na nuvem" else "arquivos de pastas")
+            }
             if (deleted.isNotEmpty()) {
                 val history = historyStore.add(
                     HistoryEntry(System.currentTimeMillis(), HistoryType.FILES_DELETED, deleted.size, deleted.sumOf { it.sizeBytes })
@@ -326,6 +347,46 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
     }
 
     fun dismissWin() = _state.update { it.copy(win = null) }
+
+    // ---------------- Recuperar ----------------
+
+    fun loadRecycle() {
+        viewModelScope.launch(Dispatchers.IO) {
+            _state.update { it.copy(recycle = recycleBin.list(), retentionDays = recycleBin.retentionDays) }
+        }
+    }
+
+    fun setRetention(days: Int) {
+        recycleBin.retentionDays = days
+        _state.update { it.copy(retentionDays = days) }
+    }
+
+    fun restoreRecycle(items: List<RecycleItem>) {
+        viewModelScope.launch(Dispatchers.IO) {
+            _state.update { it.copy(deleting = 0 to items.size, recycleMessage = null) }
+            val done = try {
+                recycleBin.restore(items, if (items.any { it.place == br.com.celularsaudavel.data.BinPlace.CLOUD }) drive else null) { n ->
+                    _state.update { it.copy(deleting = n to items.size) }
+                }
+            } catch (e: Exception) {
+                emptyList()
+            }
+            val msg = if (done.size == items.size) "${done.size} arquivos voltaram para o lugar de origem."
+            else "${done.size} de ${items.size} arquivos recuperados. Os da nuvem precisam do Google Drive conectado."
+            _state.update { it.copy(deleting = null, recycle = recycleBin.list(), recycleMessage = msg, storage = media.storageInfo()) }
+        }
+    }
+
+    fun deleteRecycleForever(items: List<RecycleItem>) {
+        viewModelScope.launch(Dispatchers.IO) {
+            val cloud = items.any { it.place == br.com.celularsaudavel.data.BinPlace.CLOUD }
+            if (cloud) runCatching { drive.refreshToken() }
+            val done = recycleBin.deleteForever(items, if (cloud) drive else null)
+            val phoneBytes = done.filter { it.place == br.com.celularsaudavel.data.BinPlace.PHONE }.sumOf { it.size }
+            _state.update { it.copy(recycle = recycleBin.list(), storage = media.storageInfo()) }
+            if (phoneBytes > 0) celebrate(phoneBytes, done.size, "arquivos apagados de vez")
+        }
+    }
 
     fun loadTrash() {
         viewModelScope.launch(Dispatchers.IO) {

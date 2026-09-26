@@ -62,6 +62,7 @@ import br.com.celularsaudavel.ui.screens.HomeScreen
 import br.com.celularsaudavel.ui.screens.LargeVideosScreen
 import br.com.celularsaudavel.ui.screens.MonitorScreen
 import br.com.celularsaudavel.ui.screens.PremiumScreen
+import br.com.celularsaudavel.ui.screens.RecoverScreen
 import br.com.celularsaudavel.ui.screens.MoreScreen
 import br.com.celularsaudavel.ui.screens.PermissionsScreen
 import br.com.celularsaudavel.ui.screens.PrivacyScreen
@@ -323,6 +324,10 @@ fun AppRoot(vm: MainViewModel = viewModel()) {
         )
     }
 
+    var preview by remember { mutableStateOf<br.com.celularsaudavel.ui.PreviewTarget?>(null) }
+    preview?.let { t -> br.com.celularsaudavel.ui.PreviewDialog(t, onClose = { preview = null }) }
+    val openPreview: (br.com.celularsaudavel.ui.PreviewTarget) -> Unit = { preview = it }
+
     state.deleting?.let { (done, total) -> DeletingDialog(done, total) }
     state.win?.let { w ->
         WinDialog(
@@ -381,12 +386,14 @@ fun AppRoot(vm: MainViewModel = viewModel()) {
                     videos = state.screenshots,
                     title = "Capturas de tela",
                     subtitle = "Prints guardados, dos mais novos para os mais antigos.",
-                    noun = "prints"
+                    noun = "prints",
+                    onPreview = openPreview
                 )
                 sub == "videos" -> LargeVideosScreen(
                     state, onBack = { sub = null },
                     makeRequest = vm::trashRequest,
-                    onRemoved = { vm.onMediaRemoved(HistoryType.VIDEOS_TRASHED, it) }
+                    onRemoved = { vm.onMediaRemoved(HistoryType.VIDEOS_TRASHED, it) },
+                    onPreview = openPreview
                 )
                 sub == "trash" -> TrashScreen(
                     state, onBack = { sub = null },
@@ -394,7 +401,8 @@ fun AppRoot(vm: MainViewModel = viewModel()) {
                     deleteRequest = vm::deleteRequest,
                     restoreRequest = vm::restoreRequest,
                     onDeleted = { vm.onMediaRemoved(HistoryType.TRASH_DELETED, it) },
-                    onRestored = vm::onTrashRestored
+                    onRestored = vm::onTrashRestored,
+                    onPreview = openPreview
                 )
                 sub == "folders" -> FoldersScreen(
                     state, onBack = { sub = null },
@@ -405,7 +413,18 @@ fun AppRoot(vm: MainViewModel = viewModel()) {
                 sub?.startsWith("folder:") == true -> FolderCategoryScreen(
                     state, categoryId = sub!!.removePrefix("folder:"),
                     onBack = { sub = "folders" },
-                    onDelete = vm::deleteFolderFiles
+                    onDelete = { files, mode -> vm.deleteFolderFiles(files, mode) },
+                    onPreview = openPreview,
+                    onOpenRecover = { sub = "recover" }
+                )
+                sub == "recover" -> RecoverScreen(
+                    state, onBack = { sub = null },
+                    onLoad = vm::loadRecycle,
+                    onRestore = vm::restoreRecycle,
+                    onDeleteForever = vm::deleteRecycleForever,
+                    onSetRetention = vm::setRetention,
+                    onOpenSystemTrash = { sub = "trash" },
+                    onPreview = openPreview
                 )
                 sub == "history" -> HistoryScreen(state, onBack = { sub = null })
                 sub == "perms" -> PermissionsScreen(
@@ -497,6 +516,7 @@ fun AppRoot(vm: MainViewModel = viewModel()) {
                     onOpenPrivacy = { sub = "privacy" },
                     onOpenMonitor = { sub = "monitor" },
                     onOpenPremium = { sub = "premium" },
+                    onOpenRecover = { sub = "recover" },
                 )
             }
         }

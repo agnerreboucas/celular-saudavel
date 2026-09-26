@@ -184,6 +184,26 @@ class DriveRepository(private val context: Context) {
         )
     }
 
+    /** Baixa um arquivo que o app enviou (usado para recuperar da nuvem). */
+    fun download(fileId: String, dest: java.io.File) = withRetry {
+        val c = open("$API/files/$fileId?alt=media", "GET")
+        val code = c.responseCode
+        if (code !in 200..299) {
+            body(c)
+            throw IOException("Drive respondeu $code")
+        }
+        dest.parentFile?.mkdirs()
+        c.inputStream.use { input -> dest.outputStream().use { input.copyTo(it, 256 * 1024) } }
+    }
+
+    /** Apaga do Drive um arquivo que o app enviou. */
+    fun delete(fileId: String) = withRetry {
+        val c = open("$API/files/$fileId", "DELETE")
+        val code = c.responseCode
+        if (code != 204 && code != 404 && code !in 200..299) body(c)
+        Unit
+    }
+
     fun disconnect() {
         token = null
         prefs.edit().clear().apply()
