@@ -20,6 +20,7 @@ import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
@@ -193,12 +194,7 @@ fun DuplicatesScreen(
     }
     var hint by remember { mutableStateOf<String?>(null) }
     var confirm by remember { mutableStateOf(false) }
-    var pending by remember { mutableStateOf<List<MediaFile>>(emptyList()) }
-
-    val launcher = rememberLauncherForActivityResult(ActivityResultContracts.StartIntentSenderForResult()) { r ->
-        if (r.resultCode == Activity.RESULT_OK) onRemoved(pending)
-        pending = emptyList()
-    }
+    val remove = rememberBatchRemover(onRemoved)
 
     val chosen = groups.flatMap { it.files }.filter { it.uri in selected }
     val chosenBytes = chosen.sumOf { it.sizeBytes }
@@ -321,11 +317,7 @@ fun DuplicatesScreen(
             confirmButton = {
                 TextButton(onClick = {
                     confirm = false
-                    val sender = makeRequest(chosen.map { it.uri })
-                    if (sender != null) {
-                        pending = chosen
-                        launcher.launch(IntentSenderRequest.Builder(sender).build())
-                    }
+                    remove(chosen, makeRequest)
                 }) { Text("Liberar espaço") }
             },
             dismissButton = { TextButton(onClick = { confirm = false }) { Text("Cancelar") } }
@@ -350,12 +342,7 @@ fun LargeVideosScreen(
     var selected by remember(videos) { mutableStateOf(emptySet<String>()) }
     var mode by remember { mutableStateOf(SelMode.ONE) }
     var confirm by remember { mutableStateOf(false) }
-    var pending by remember { mutableStateOf<List<MediaFile>>(emptyList()) }
-
-    val launcher = rememberLauncherForActivityResult(ActivityResultContracts.StartIntentSenderForResult()) { r ->
-        if (r.resultCode == Activity.RESULT_OK) onRemoved(pending)
-        pending = emptyList()
-    }
+    val remove = rememberBatchRemover(onRemoved)
 
     val chosen = videos.filter { it.uri.toString() in selected }
     val chosenBytes = chosen.sumOf { it.sizeBytes }
@@ -442,11 +429,7 @@ fun LargeVideosScreen(
             confirmButton = {
                 TextButton(onClick = {
                     confirm = false
-                    val sender = makeRequest(chosen.map { it.uri })
-                    if (sender != null) {
-                        pending = chosen
-                        launcher.launch(IntentSenderRequest.Builder(sender).build())
-                    }
+                    remove(chosen, makeRequest)
                 }) { Text("Mover para a lixeira") }
             },
             dismissButton = { TextButton(onClick = { confirm = false }) { Text("Cancelar") } }
@@ -472,16 +455,8 @@ fun TrashScreen(
     var selected by remember(items) { mutableStateOf(items.map { it.uri.toString() }.toSet()) }
     var mode by remember { mutableStateOf(SelMode.ONE) }
     var confirm by remember { mutableStateOf(false) }
-    var pending by remember { mutableStateOf<List<MediaFile>>(emptyList()) }
-    var restoring by remember { mutableStateOf(false) }
-
-    val launcher = rememberLauncherForActivityResult(ActivityResultContracts.StartIntentSenderForResult()) { r ->
-        if (r.resultCode == Activity.RESULT_OK) {
-            if (restoring) onRestored() else onDeleted(pending)
-        }
-        pending = emptyList()
-        restoring = false
-    }
+    val remove = rememberBatchRemover(onDeleted)
+    val restore = rememberBatchRemover { onRestored() }
 
     val chosen = items.filter { it.uri.toString() in selected }
     val chosenBytes = chosen.sumOf { it.sizeBytes }
@@ -572,11 +547,7 @@ fun TrashScreen(
                 Spacer(Modifier.height(8.dp))
                 OutlinedButton(
                     onClick = {
-                        val sender = restoreRequest(chosen.map { it.uri })
-                        if (sender != null) {
-                            restoring = true
-                            launcher.launch(IntentSenderRequest.Builder(sender).build())
-                        }
+                        restore(chosen, restoreRequest)
                     },
                     enabled = chosen.isNotEmpty(),
                     modifier = Modifier.fillMaxWidth().height(48.dp),
@@ -599,15 +570,83 @@ fun TrashScreen(
             confirmButton = {
                 TextButton(onClick = {
                     confirm = false
-                    val sender = deleteRequest(chosen.map { it.uri })
-                    if (sender != null) {
-                        pending = chosen
-                        restoring = false
-                        launcher.launch(IntentSenderRequest.Builder(sender).build())
-                    }
+                    remove(chosen, deleteRequest)
                 }) { Text("Apagar de vez") }
             },
             dismissButton = { TextButton(onClick = { confirm = false }) { Text("Cancelar") } }
         )
+    }
+}
+
+
+// ---------------- Confirmação em lotes ----------------
+
+/** O Android aceita no máximo 2.000 arquivos por confirmação. Usamos lotes de 1.000, um depois do outro. */
+private const val BATCH = 1000
+
+private class BatchState {
+    var queue by mutableStateOf<List<MediaFile>>(emptyList())
+    var current by mutableStateOf<List<MediaFile>>(emptyList())
+    var done by mutableStateOf<List<MediaFile>>(emptyList())
+    var request: ((List<Uri>) -> IntentSender?)? = null
+    var step by mutableIntStateOf(0)
+}
+
+/**
+ * Devolve uma função que pede a confirmação do Android em lotes e, no fim,
+ * chama [onDone] uma única vez com tudo o que foi confirmado. Nunca derruba o app.
+ */
+@Composable
+private fun rememberBatchRemover(onDone: (List<MediaFile>) -> Unit): (List<MediaFile>, (List<Uri>) -> IntentSender?) -> Unit {
+    val st = remember { BatchState() }
+    val context = LocalContext.current
+    val finish = {
+        val d = st.done
+        st.queue = emptyList(); st.current = emptyList(); st.done = emptyList()
+        if (d.isNotEmpty()) onDone(d)
+    }
+    val launcher = rememberLauncherForActivityResult(ActivityResultContracts.StartIntentSenderForResult()) { r ->
+        if (r.resultCode == Activity.RESULT_OK) {
+            st.done = st.done + st.current
+            st.current = emptyList()
+            if (st.queue.isNotEmpty()) st.step++ else finish()
+        } else {
+            finish()
+        }
+    }
+    val launchNext = launchNext@{
+        val req = st.request ?: return@launchNext
+        val batch = st.queue.take(BATCH)
+        st.queue = st.queue.drop(BATCH)
+        st.current = batch
+        val sender = try {
+            req(batch.map { it.uri })
+        } catch (e: Exception) {
+            null
+        }
+        if (sender != null) {
+            try {
+                launcher.launch(IntentSenderRequest.Builder(sender).build())
+            } catch (e: Exception) {
+                android.widget.Toast.makeText(context, "O Android não abriu a confirmação. Tente com menos arquivos.", android.widget.Toast.LENGTH_LONG).show()
+                finish()
+            }
+        } else {
+            android.widget.Toast.makeText(context, "O Android não abriu a confirmação. Tente com menos arquivos.", android.widget.Toast.LENGTH_LONG).show()
+            finish()
+        }
+    }
+    LaunchedEffect(st.step) { if (st.step > 0) launchNext() }
+    return { files, req ->
+        if (files.isNotEmpty()) {
+            st.request = req
+            st.done = emptyList()
+            st.queue = files
+            if (files.size > BATCH) {
+                val n = (files.size + BATCH - 1) / BATCH
+                android.widget.Toast.makeText(context, "São ${formatCount(files.size)} arquivos: o Android vai pedir $n confirmações.", android.widget.Toast.LENGTH_LONG).show()
+            }
+            launchNext()
+        }
     }
 }

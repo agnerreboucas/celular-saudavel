@@ -14,8 +14,8 @@ android {
         applicationId = "br.com.celularsaudavel"
         minSdk = 26
         targetSdk = 36
-        versionCode = 12
-        versionName = "1.6.0"
+        versionCode = 13
+        versionName = "1.6.1"
     }
 
     // Chave de TESTE fixa: permite atualizar o app instalado sem desinstalar.
