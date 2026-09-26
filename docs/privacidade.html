@@ -1,0 +1,160 @@
+<title>Privacidade do Celular Saudável</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Bricolage+Grotesque:opsz,wght@12..96,600;12..96,700&family=Figtree:wght@400;500;600&display=swap">
+<style>
+  :root {
+    --bg: #f3f5f2;
+    --paper: #ffffff;
+    --ink: #15191b;
+    --muted: #5d666b;
+    --line: #dfe4de;
+    --green: #1e7f55;
+    --green-soft: #e3f2ea;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root:not([data-theme="light"]) {
+      --bg: #101413; --paper: #171d1b; --ink: #e8ece9; --muted: #9aa5a0; --line: #2a332f;
+      --green: #5cc394; --green-soft: #173327; color-scheme: dark;
+    }
+  }
+  :root[data-theme="dark"] {
+    --bg: #101413; --paper: #171d1b; --ink: #e8ece9; --muted: #9aa5a0; --line: #2a332f;
+    --green: #5cc394; --green-soft: #173327; color-scheme: dark;
+  }
+  body {
+    background: var(--bg);
+    color: var(--ink);
+    font-family: "Figtree", system-ui, -apple-system, "Segoe UI", sans-serif;
+    font-size: 16px;
+    line-height: 1.65;
+    padding-inline: 16px;
+    padding-block: 32px 64px;
+  }
+  .wrap { max-width: 720px; margin: 0 auto; display: grid; gap: 28px; }
+  header { display: grid; gap: 10px; }
+  .app {
+    display: inline-flex; align-items: center; gap: 10px;
+    font-weight: 600; font-size: 14px; letter-spacing: .04em; text-transform: uppercase; color: var(--green);
+  }
+  .app svg { width: 28px; height: 28px; flex: none; }
+  h1 {
+    font-family: "Bricolage Grotesque", "Figtree", system-ui, sans-serif;
+    font-size: clamp(30px, 6vw, 44px); line-height: 1.1; margin: 0; text-wrap: balance;
+  }
+  .meta { color: var(--muted); font-size: 14px; margin: 0; }
+  .summary {
+    background: var(--green-soft); border-radius: 16px; padding: 20px 22px;
+    display: grid; gap: 8px;
+  }
+  .summary h2 { margin: 0; font-size: 17px; color: var(--green); font-family: "Figtree", system-ui, sans-serif; }
+  .summary ul { margin: 0; padding-left: 20px; display: grid; gap: 4px; }
+  section { display: grid; gap: 8px; border-top: 1px solid var(--line); padding-top: 22px; }
+  h2 {
+    font-family: "Bricolage Grotesque", "Figtree", system-ui, sans-serif;
+    font-size: 22px; line-height: 1.25; margin: 0; text-wrap: balance;
+  }
+  p, li { max-width: 65ch; }
+  p { margin: 0; }
+  ul { margin: 0; padding-left: 22px; display: grid; gap: 6px; }
+  .table-wrap { overflow-x: auto; }
+  table { border-collapse: collapse; width: 100%; font-size: 15px; background: var(--paper); border-radius: 12px; overflow: hidden; }
+  th, td { text-align: left; padding: 10px 12px; border-bottom: 1px solid var(--line); vertical-align: top; }
+  th { font-weight: 600; color: var(--muted); font-size: 13px; letter-spacing: .03em; text-transform: uppercase; }
+  tr:last-child td { border-bottom: 0; }
+  code { font-size: 14px; background: var(--paper); border: 1px solid var(--line); padding: 1px 6px; border-radius: 6px; }
+  .contact { background: var(--paper); border: 1px solid var(--line); border-radius: 14px; padding: 16px 18px; display: grid; gap: 4px; }
+  .email { font-weight: 600; user-select: all; word-break: break-all; }
+  a { color: var(--green); }
+  a:focus-visible { outline: 2px solid var(--green); outline-offset: 2px; }
+</style>
+
+<main class="wrap">
+  <header>
+    <span class="app">
+      <svg viewBox="0 0 108 108" aria-hidden="true"><rect width="108" height="108" rx="26" fill="#1e7f55"/><path d="M42 32h24q4 0 4 4v36q0 4-4 4H42q-4 0-4-4V36q0-4 4-4z" fill="none" stroke="#fff" stroke-width="4" stroke-linejoin="round"/><path d="M46 54l6 6 11-12" fill="none" stroke="#fff" stroke-width="4.5" stroke-linecap="round" stroke-linejoin="round"/></svg>
+      Celular Saudável
+    </span>
+    <h1>Política de Privacidade</h1>
+    <p class="meta">Vigente desde 26 de setembro de 2026 · Aplicativo para Android <code>br.com.celularsaudavel</code></p>
+  </header>
+
+  <div class="summary">
+    <h2>Em resumo</h2>
+    <ul>
+      <li>A análise do celular acontece no próprio aparelho. Não temos servidores que recebam seus arquivos.</li>
+      <li>Nada é apagado sem a sua confirmação e a do sistema Android.</li>
+      <li>O backup vai para o <strong>seu</strong> Google Drive, e o app só enxerga os arquivos que ele mesmo enviou.</li>
+      <li>Não mostramos anúncios, não usamos rastreadores e não vendemos nem compartilhamos dados.</li>
+    </ul>
+  </div>
+
+  <section>
+    <h2>Quem é o responsável</h2>
+    <p>O Celular Saudável é desenvolvido por Ampliação Marketing Digital (Agner Simões Rebouças), Guarulhos, SP, Brasil, responsável pelo tratamento de dados nos termos da Lei Geral de Proteção de Dados (Lei 13.709/2018).</p>
+  </section>
+
+  <section>
+    <h2>O que o app acessa e por quê</h2>
+    <div class="table-wrap">
+      <table>
+        <thead><tr><th>Acesso</th><th>Para quê</th><th>Sai do celular?</th></tr></thead>
+        <tbody>
+          <tr><td>Fotos, vídeos e áudios</td><td>Medir o espaço, encontrar duplicadas, fotos em sequência, capturas de tela e vídeos grandes, e fazer o backup que você pedir</td><td>Só os arquivos que você mandar para o seu Google Drive</td></tr>
+          <tr><td>Uso dos aplicativos (liberado por você nas Configurações)</td><td>Mostrar o tamanho, o cache e há quanto tempo cada app não é usado</td><td>Não</td></tr>
+          <tr><td>Lista de apps instalados</td><td>Montar a lista de aplicativos e abrir a desinstalação oficial do Android</td><td>Não</td></tr>
+          <tr><td>Informações de armazenamento</td><td>Calcular o espaço usado e livre e o índice de saúde</td><td>Não</td></tr>
+          <tr><td>Notificações</td><td>Avisar quando o espaço estiver acabando, enviar o check-up semanal e lembrar do backup</td><td>Não</td></tr>
+          <tr><td>Internet</td><td>Somente para o backup no Google Drive e para a assinatura pela Google Play</td><td>Veja as seções abaixo</td></tr>
+        </tbody>
+      </table>
+    </div>
+    <p>O histórico de limpezas, as preferências e o estado de cada backup ficam guardados apenas no aparelho.</p>
+  </section>
+
+  <section>
+    <h2>Backup no Google Drive</h2>
+    <p>Quando você conecta o Google Drive, o app pede apenas a permissão <code>drive.file</code>. Com ela, o app cria a pasta "Celular Saudável" na sua conta e só consegue ver e alterar os arquivos que ele mesmo enviou. Ele não lê o restante do seu Drive.</p>
+    <p>Os arquivos vão diretamente do seu celular para o Google. Para conferir cada envio, o app compara o tamanho e a impressão digital (MD5) que o Google devolve com os do arquivo original. O acesso é gerenciado pelo Google Play Services, e você pode desconectar no app ou em <a href="https://myaccount.google.com/permissions" rel="noopener">myaccount.google.com/permissions</a>.</p>
+    <p>O uso de informações recebidas das APIs do Google obedece à <a href="https://developers.google.com/terms/api-services-user-data-policy" rel="noopener">Política de Dados do Usuário dos Serviços de API do Google</a>, incluindo os requisitos de Uso Limitado.</p>
+  </section>
+
+  <section>
+    <h2>Assinatura Premium</h2>
+    <p>O pagamento é processado pela Google Play. Não recebemos número de cartão nem dados de pagamento; o app recebe apenas a confirmação de que a assinatura está ativa. A assinatura renova automaticamente até ser cancelada em Play Store → Pagamentos e assinaturas. Desinstalar o app não cancela a assinatura.</p>
+  </section>
+
+  <section>
+    <h2>O que não fazemos</h2>
+    <ul>
+      <li>Não exibimos anúncios.</li>
+      <li>Não usamos ferramentas de análise, rastreamento ou perfis de publicidade.</li>
+      <li>Não vendemos, alugamos nem compartilhamos dados com terceiros.</li>
+      <li>Não enviamos seus arquivos para servidores nossos.</li>
+    </ul>
+  </section>
+
+  <section>
+    <h2>Exclusão e seus direitos</h2>
+    <p>Ao desinstalar o app, todos os dados guardados por ele no aparelho são apagados. Os arquivos enviados ao Google Drive continuam na sua conta até você apagá-los.</p>
+    <p>Pela LGPD você pode pedir confirmação de tratamento, acesso, correção, exclusão e informações sobre compartilhamento. Como não mantemos seus dados em servidores, a maior parte desses pedidos se resolve no próprio aparelho, mas você pode nos escrever a qualquer momento.</p>
+  </section>
+
+  <section>
+    <h2>Crianças</h2>
+    <p>O app não é direcionado a menores de 13 anos e não coleta dados de forma intencional desse público.</p>
+  </section>
+
+  <section>
+    <h2>Mudanças nesta política</h2>
+    <p>Se esta política mudar, atualizaremos a data no topo desta página e avisaremos no app quando a mudança for relevante.</p>
+  </section>
+
+  <section>
+    <h2>Contato</h2>
+    <div class="contact">
+      <span>Dúvidas ou pedidos sobre privacidade:</span>
+      <span class="email">ampliacaomktdigital@gmail.com</span>
+    </div>
+  </section>
+</main>
