@@ -278,6 +278,51 @@ fun AppRoot(vm: MainViewModel = viewModel()) {
         }
     }
 
+    // Falha anterior: mostra e deixa enviar os detalhes
+    var crashText by remember {
+        mutableStateOf(
+            try {
+                val f = CelularSaudavelApp.crashFile(context.applicationContext as android.app.Application)
+                if (f.exists()) f.readText() else null
+            } catch (_: Exception) {
+                null
+            }
+        )
+    }
+    crashText?.let { text ->
+        val clear = {
+            try {
+                CelularSaudavelApp.crashFile(context.applicationContext as android.app.Application).delete()
+            } catch (_: Exception) {
+            }
+            crashText = null
+        }
+        androidx.compose.material3.AlertDialog(
+            onDismissRequest = { clear() },
+            title = { Text("O app fechou por um erro") },
+            text = {
+                Text(
+                    "Da última vez o Celular Saudável fechou sozinho. Envie os detalhes para corrigirmos: " +
+                        "eles contêm só o modelo do celular, a versão do Android e onde o erro aconteceu."
+                )
+            },
+            confirmButton = {
+                androidx.compose.material3.TextButton(onClick = {
+                    context.safeStart(
+                        Intent.createChooser(
+                            Intent(Intent.ACTION_SEND).setType("text/plain")
+                                .putExtra(Intent.EXTRA_SUBJECT, "Falha no Celular Saudável")
+                                .putExtra(Intent.EXTRA_TEXT, text),
+                            "Enviar detalhes do erro"
+                        ).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+                    )
+                    clear()
+                }) { Text("Enviar detalhes") }
+            },
+            dismissButton = { androidx.compose.material3.TextButton(onClick = { clear() }) { Text("Agora não") } }
+        )
+    }
+
     state.deleting?.let { (done, total) -> DeletingDialog(done, total) }
     state.win?.let { w ->
         WinDialog(

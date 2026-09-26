@@ -52,6 +52,7 @@
     </queries>
 
     <application
+        android:name=".CelularSaudavelApp"
         android:allowBackup="false"
         android:requestLegacyExternalStorage="true"
         android:icon="@mipmap/ic_launcher"
