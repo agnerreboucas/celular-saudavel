@@ -342,6 +342,14 @@ fun AppRoot(vm: MainViewModel = viewModel()) {
         )
     }
 
+    if (!state.onboarded) {
+        br.com.celularsaudavel.ui.screens.OnboardingScreen(initialName = state.userName) { name ->
+            vm.finishOnboarding(name)
+            go(TAB_HOME, null)
+        }
+        return
+    }
+
     Scaffold(
         containerColor = CS.Bg,
         bottomBar = {
@@ -520,6 +528,8 @@ fun AppRoot(vm: MainViewModel = viewModel()) {
                     onOpenMonitor = { sub = "monitor" },
                     onOpenPremium = { sub = "premium" },
                     onOpenRecover = { sub = "recover" },
+                    onSetName = vm::setUserName,
+                    onReplayIntro = vm::replayOnboarding,
                 )
             }
         }

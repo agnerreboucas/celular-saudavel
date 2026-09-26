@@ -89,13 +89,15 @@ object DailyBulletin {
         }
         HealthNotifier.notify(
             context, ID_DAILY,
-            (when {
-                prefs.bulletinFreq == "W" -> "Resumo da semana"
-                prefs.bulletinFreq == "M" -> "Resumo do mês"
-                prefs.dailyHour < 12 -> "Bom dia"
-                prefs.dailyHour < 18 -> "Boa tarde"
-                else -> "Boa noite"
-            }) + "! Saúde do celular: $score/100 · $h",
+            run {
+                val nome = UserPrefs(context).firstName
+                val base = when (prefs.bulletinFreq) {
+                    "W" -> "Resumo da semana"
+                    "M" -> "Resumo do mês"
+                    else -> greetingFor(prefs.dailyHour)
+                }
+                (if (nome.isNotBlank()) "$base, $nome" else base) + "! Saúde do celular: $score/100 · $h"
+            },
             "${formatBytes(st.freeBytes)} livres ($pct% ocupado).$change$tip",
             channel = HealthNotifier.CHANNEL_DAILY
         )

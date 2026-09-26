@@ -26,6 +26,7 @@ import br.com.celularsaudavel.data.HistoryStore
 import br.com.celularsaudavel.data.MonitorPrefs
 import br.com.celularsaudavel.data.MediaRepository
 import br.com.celularsaudavel.data.RecycleBin
+import br.com.celularsaudavel.data.UserPrefs
 import br.com.celularsaudavel.data.RecycleItem
 import br.com.celularsaudavel.model.CategoryStat
 import br.com.celularsaudavel.model.DuplicateGroup
@@ -126,6 +127,8 @@ data class UiState(
     val recycle: List<RecycleItem> = emptyList(),
     val retentionDays: Int = 90,
     val recycleMessage: String? = null,
+    val userName: String = "",
+    val onboarded: Boolean = true,
     val history: List<HistoryEntry> = emptyList(),
 ) {
     /** Versão completa (APK direto) libera tudo; na Play depende da assinatura. */
@@ -175,6 +178,7 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
     private val monitorPrefs = MonitorPrefs(app)
     val billing = BillingRepository(app)
     private val recycleBin = RecycleBin(app)
+    private val userPrefs = UserPrefs(app)
 
     private var images: List<MediaFile> = emptyList()
     private var videos: List<MediaFile> = emptyList()
@@ -183,6 +187,7 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
     val state: StateFlow<UiState> = _state.asStateFlow()
 
     init {
+        _state.update { it.copy(userName = userPrefs.firstName, onboarded = userPrefs.onboarded) }
         if (!BuildConfig.PREMIUM_FREE) {
             billing.start()
             viewModelScope.launch {
@@ -358,6 +363,19 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
             )
         }
     }
+
+    fun finishOnboarding(name: String) {
+        userPrefs.name = name
+        userPrefs.onboarded = true
+        _state.update { it.copy(userName = userPrefs.firstName, onboarded = true) }
+    }
+
+    fun setUserName(name: String) {
+        userPrefs.name = name
+        _state.update { it.copy(userName = userPrefs.firstName) }
+    }
+
+    fun replayOnboarding() = _state.update { it.copy(onboarded = false) }
 
     fun dismissWin() = _state.update { it.copy(win = null) }
 

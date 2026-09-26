@@ -51,7 +51,9 @@ fun HomeScreen(
         verticalArrangement = ListSpacing
     ) {
         item {
-            ScreenHeader("Olá 👋", state.health?.headline ?: "Vamos cuidar do seu celular.")
+            val hour = java.util.Calendar.getInstance().get(java.util.Calendar.HOUR_OF_DAY)
+            val hello = br.com.celularsaudavel.data.greetingFor(hour) + if (state.userName.isNotBlank()) ", ${state.userName}" else ""
+            ScreenHeader("$hello 👋", state.health?.headline ?: "Vamos cuidar do seu celular.")
         }
 
         // ---------- Índice ----------

@@ -6,7 +6,7 @@ import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.material3.*
-import androidx.compose.runtime.Composable
+import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.text.font.FontWeight
@@ -28,13 +28,41 @@ fun MoreScreen(
     onOpenMonitor: () -> Unit,
     onOpenPremium: () -> Unit,
     onOpenRecover: () -> Unit,
+    onSetName: (String) -> Unit,
+    onReplayIntro: () -> Unit,
 ) {
+    var editName by remember { mutableStateOf(false) }
+    if (editName) {
+        var value by remember { mutableStateOf(state.userName) }
+        AlertDialog(
+            onDismissRequest = { editName = false },
+            title = { Text("Como podemos te chamar?") },
+            text = {
+                OutlinedTextField(
+                    value = value, onValueChange = { value = it.take(40) }, singleLine = true,
+                    label = { Text("Seu nome") },
+                    keyboardOptions = androidx.compose.foundation.text.KeyboardOptions(
+                        capitalization = androidx.compose.ui.text.input.KeyboardCapitalization.Words
+                    )
+                )
+            },
+            confirmButton = { TextButton(onClick = { onSetName(value); editName = false }) { Text("Salvar") } },
+            dismissButton = { TextButton(onClick = { editName = false }) { Text("Cancelar") } }
+        )
+    }
     LazyColumn(
         modifier = Modifier.fillMaxSize(),
         contentPadding = PaddingValues(20.dp),
         verticalArrangement = ListSpacing
     ) {
         item { ScreenHeader("Mais") }
+        item {
+            RowCard(
+                "🙂", "Seu nome",
+                if (state.userName.isBlank()) "Toque para dizer como quer ser chamado" else state.userName,
+                onClick = { editName = true }
+            )
+        }
         item {
             RowCard(
                 "📊", "Histórico",
@@ -61,9 +89,10 @@ fun MoreScreen(
         item { RowCard("♻️", "Recuperar arquivos", "Volte atrás no que foi apagado pelo app", onClick = onOpenRecover) }
         item { RowCard("🔐", "Permissões", "Veja e ajuste o que o app pode acessar", onClick = onOpenPermissions) }
         item { RowCard("🛡️", "Privacidade", "O que o app faz (e não faz) com seus dados", onClick = onOpenPrivacy) }
+        item { RowCard("✨", "Ver a apresentação", "Tudo o que o app faz, em 1 minuto", onClick = onReplayIntro) }
         item {
             Text(
-                "Celular Saudável · versão de teste $versionName",
+                "Celular Saudável · versão $versionName",
                 color = CS.Muted, fontSize = 12.sp,
                 modifier = Modifier.fillMaxWidth().padding(top = 8.dp)
             )
