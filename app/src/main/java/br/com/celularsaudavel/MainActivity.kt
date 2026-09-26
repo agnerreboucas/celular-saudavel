@@ -37,6 +37,10 @@ import androidx.lifecycle.compose.LifecycleEventEffect
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.lifecycle.viewmodel.compose.viewModel
 import br.com.celularsaudavel.model.HistoryType
+import br.com.celularsaudavel.model.InstalledApp
+import br.com.celularsaudavel.ui.screens.SORT_CACHE
+import br.com.celularsaudavel.ui.screens.SORT_SIZE
+import br.com.celularsaudavel.ui.screens.SORT_UNUSED
 import br.com.celularsaudavel.ui.CS
 import br.com.celularsaudavel.ui.CelularSaudavelTheme
 import br.com.celularsaudavel.ui.MainViewModel
@@ -50,6 +54,7 @@ import br.com.celularsaudavel.ui.screens.LargeVideosScreen
 import br.com.celularsaudavel.ui.screens.MoreScreen
 import br.com.celularsaudavel.ui.screens.PermissionsScreen
 import br.com.celularsaudavel.ui.screens.PrivacyScreen
+import br.com.celularsaudavel.ui.screens.TrashScreen
 
 class MainActivity : ComponentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
@@ -123,6 +128,30 @@ fun AppRoot(vm: MainViewModel = viewModel()) {
         )
     }
     val go: (Int, String?) -> Unit = { t, s -> tab = t; sub = s }
+    var appsSort by rememberSaveable { mutableIntStateOf(SORT_SIZE) }
+    val openApps: (Int) -> Unit = { sort -> appsSort = sort; go(TAB_APPS, null) }
+
+    var pendingUninstall by remember { mutableStateOf<InstalledApp?>(null) }
+    val uninstallLauncher = rememberLauncherForActivityResult(
+        ActivityResultContracts.StartActivityForResult()
+    ) {
+        pendingUninstall?.let(vm::onUninstallFinished)
+        pendingUninstall = null
+    }
+    val openAppDetails: (InstalledApp) -> Unit = { app ->
+        context.safeStart(
+            Intent(Settings.ACTION_APPLICATION_DETAILS_SETTINGS, Uri.fromParts("package", app.packageName, null))
+        )
+    }
+    val uninstall: (InstalledApp) -> Unit = { app ->
+        try {
+            pendingUninstall = app
+            uninstallLauncher.launch(Intent(Intent.ACTION_DELETE, Uri.parse("package:${app.packageName}")))
+        } catch (_: Exception) {
+            pendingUninstall = null
+            openAppDetails(app)
+        }
+    }
 
     LaunchedEffect(tab) {
         if (tab == TAB_APPS && !vm.state.value.appsLoaded && !vm.state.value.appsLoading) vm.loadApps()
@@ -173,6 +202,14 @@ fun AppRoot(vm: MainViewModel = viewModel()) {
                     makeRequest = vm::trashRequest,
                     onRemoved = { vm.onMediaRemoved(HistoryType.VIDEOS_TRASHED, it) }
                 )
+                sub == "trash" -> TrashScreen(
+                    state, onBack = { sub = null },
+                    onLoad = vm::loadTrash,
+                    deleteRequest = vm::deleteRequest,
+                    restoreRequest = vm::restoreRequest,
+                    onDeleted = { vm.onMediaRemoved(HistoryType.TRASH_DELETED, it) },
+                    onRestored = vm::onTrashRestored
+                )
                 sub == "history" -> HistoryScreen(state, onBack = { sub = null })
                 sub == "perms" -> PermissionsScreen(
                     state, onBack = { sub = null },
@@ -188,7 +225,13 @@ fun AppRoot(vm: MainViewModel = viewModel()) {
                     onOpenClean = { go(TAB_CLEAN, null) },
                     onOpenDuplicates = { go(TAB_CLEAN, "dups") },
                     onOpenVideos = { go(TAB_CLEAN, "videos") },
-                    onOpenApps = { go(TAB_APPS, null) },
+                    onOpenTrash = { go(TAB_CLEAN, "trash") },
+                    onOpenApps = { openApps(SORT_SIZE) },
+                    onOpenUnused = { openApps(SORT_UNUSED) },
+                    onOpenCache = { openApps(SORT_CACHE) },
+                    onOpenUsageSettings = openUsage,
+                    onUninstall = uninstall,
+                    onOpenAppSettings = openAppDetails,
                     onOpenBackup = { go(TAB_BACKUP, null) },
                     onOpenPermissions = { go(TAB_MORE, "perms") },
                 )
@@ -197,13 +240,17 @@ fun AppRoot(vm: MainViewModel = viewModel()) {
                     onScan = scan,
                     onOpenDuplicates = { sub = "dups" },
                     onOpenVideos = { sub = "videos" },
-                    onOpenApps = { go(TAB_APPS, null) },
+                    onOpenTrash = { sub = "trash" },
+                    onOpenApps = { openApps(SORT_UNUSED) },
+                    onOpenCache = { openApps(SORT_CACHE) },
                 )
                 tab == TAB_BACKUP -> BackupScreen(state, onScan = scan)
                 tab == TAB_APPS -> AppsScreen(
                     state,
+                    initialSort = appsSort,
                     onOpenUsageSettings = openUsage,
-                    onUninstallFinished = vm::onUninstallFinished
+                    onUninstall = uninstall,
+                    onOpenAppSettings = openAppDetails
                 )
                 else -> MoreScreen(
                     state,

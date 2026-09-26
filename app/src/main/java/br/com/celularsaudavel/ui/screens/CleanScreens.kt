@@ -38,7 +38,9 @@ fun CleanScreen(
     onScan: () -> Unit,
     onOpenDuplicates: () -> Unit,
     onOpenVideos: () -> Unit,
+    onOpenTrash: () -> Unit,
     onOpenApps: () -> Unit,
+    onOpenCache: () -> Unit,
 ) {
     LazyColumn(
         modifier = Modifier.fillMaxSize(),
@@ -72,6 +74,24 @@ fun CleanScreen(
                     "🎥", "Vídeos grandes",
                     if (state.largeVideos.isNotEmpty()) "${state.largeVideos.size} vídeos · ${formatBytes(state.largeVideoBytes)}" else "Nenhum vídeo acima de 100 MB",
                     onClick = onOpenVideos
+                )
+            }
+            item {
+                RowCard(
+                    "🗑️", "Lixeira",
+                    when {
+                        !canRemove -> "Disponível no Android 11 ou mais novo"
+                        state.trash.isEmpty() -> "Vazia"
+                        else -> "${formatCount(state.trash.size)} itens · ${formatBytes(state.trashBytes)}"
+                    },
+                    onClick = onOpenTrash
+                )
+            }
+            item {
+                RowCard(
+                    "🧽", "Cache dos aplicativos",
+                    if (state.usageAccess) "${formatBytes(state.cacheBytes)} em ${state.appsWithCache} apps" else "Precisa do acesso de uso",
+                    onClick = onOpenCache
                 )
             }
             item {
@@ -326,6 +346,143 @@ fun LargeVideosScreen(
                         launcher.launch(IntentSenderRequest.Builder(sender).build())
                     }
                 }) { Text("Mover para a lixeira") }
+            },
+            dismissButton = { TextButton(onClick = { confirm = false }) { Text("Cancelar") } }
+        )
+    }
+}
+
+// ---------------- Lixeira ----------------
+
+@Composable
+fun TrashScreen(
+    state: UiState,
+    onBack: () -> Unit,
+    onLoad: () -> Unit,
+    deleteRequest: (List<Uri>) -> IntentSender?,
+    restoreRequest: (List<Uri>) -> IntentSender?,
+    onDeleted: (List<MediaFile>) -> Unit,
+    onRestored: () -> Unit,
+) {
+    LaunchedEffect(Unit) { onLoad() }
+    val items = state.trash
+    var selected by remember(items) { mutableStateOf(items.map { it.uri }.toSet()) }
+    var confirm by remember { mutableStateOf(false) }
+    var pending by remember { mutableStateOf<List<MediaFile>>(emptyList()) }
+    var restoring by remember { mutableStateOf(false) }
+
+    val launcher = rememberLauncherForActivityResult(ActivityResultContracts.StartIntentSenderForResult()) { r ->
+        if (r.resultCode == Activity.RESULT_OK) {
+            if (restoring) onRestored() else onDeleted(pending)
+        }
+        pending = emptyList()
+        restoring = false
+    }
+
+    val chosen = items.filter { it.uri in selected }
+    val chosenBytes = chosen.sumOf { it.sizeBytes }
+    val nowSec = System.currentTimeMillis() / 1000
+
+    Column(Modifier.fillMaxSize()) {
+        LazyColumn(
+            modifier = Modifier.weight(1f),
+            contentPadding = PaddingValues(20.dp),
+            verticalArrangement = Arrangement.spacedBy(10.dp)
+        ) {
+            item {
+                ScreenHeader(
+                    "Lixeira",
+                    "O que está aqui ainda ocupa espaço. O Android apaga sozinho depois de uns 30 dias.",
+                    onBack
+                )
+            }
+            if (!canRemove) {
+                item { Notice("A lixeira do sistema existe a partir do Android 11.") }
+            } else if (items.isEmpty()) {
+                item { Notice("A lixeira está vazia. 👏", soft = false) }
+            } else {
+                item {
+                    Row(verticalAlignment = Alignment.CenterVertically) {
+                        Text(
+                            "${formatCount(items.size)} itens · ${formatBytes(items.sumOf { it.sizeBytes })}",
+                            color = CS.Ink, fontWeight = FontWeight.SemiBold, modifier = Modifier.weight(1f)
+                        )
+                        TextButton(onClick = {
+                            selected = if (selected.size == items.size) emptySet() else items.map { it.uri }.toSet()
+                        }) { Text(if (selected.size == items.size) "Desmarcar todos" else "Marcar todos", color = CS.Ink) }
+                    }
+                }
+            }
+            items(items, key = { it.uri.toString() }) { f ->
+                val isSel = f.uri in selected
+                CsCard(onClick = { selected = if (isSel) selected - f.uri else selected + f.uri }) {
+                    Row(verticalAlignment = Alignment.CenterVertically) {
+                        MediaThumb(f.uri, Modifier.size(56.dp))
+                        Spacer(Modifier.width(14.dp))
+                        Column(Modifier.weight(1f)) {
+                            Text(formatBytes(f.sizeBytes), fontWeight = FontWeight.SemiBold, color = CS.Ink)
+                            Text(f.name, color = CS.Muted, fontSize = 13.sp, maxLines = 1, overflow = TextOverflow.Ellipsis)
+                            if (f.expiresSec > nowSec) {
+                                val days = ((f.expiresSec - nowSec) / 86_400).toInt()
+                                Text(
+                                    if (days <= 0) "Apaga sozinho hoje" else "Apaga sozinho em $days dias",
+                                    color = CS.Muted, fontSize = 12.sp
+                                )
+                            }
+                        }
+                        Checkbox(
+                            checked = isSel,
+                            onCheckedChange = { selected = if (it) selected + f.uri else selected - f.uri },
+                            colors = CheckboxDefaults.colors(checkedColor = CS.Ink)
+                        )
+                    }
+                }
+            }
+        }
+        if (items.isNotEmpty() && canRemove) {
+            Column(Modifier.background(CS.Surface).padding(20.dp)) {
+                PrimaryButton(
+                    if (chosen.isEmpty()) "Selecione os itens" else "Apagar de vez ${chosen.size} · ${formatBytes(chosenBytes)}",
+                    onClick = { confirm = true },
+                    enabled = chosen.isNotEmpty()
+                )
+                Spacer(Modifier.height(8.dp))
+                OutlinedButton(
+                    onClick = {
+                        val sender = restoreRequest(chosen.map { it.uri })
+                        if (sender != null) {
+                            restoring = true
+                            launcher.launch(IntentSenderRequest.Builder(sender).build())
+                        }
+                    },
+                    enabled = chosen.isNotEmpty(),
+                    modifier = Modifier.fillMaxWidth().height(48.dp),
+                    shape = RoundedCornerShape(16.dp)
+                ) { Text("Restaurar para a galeria", color = CS.Ink) }
+            }
+        }
+    }
+
+    if (confirm) {
+        AlertDialog(
+            onDismissRequest = { confirm = false },
+            title = { Text("Apagar de vez?") },
+            text = {
+                Text(
+                    "${chosen.size} itens (${formatBytes(chosenBytes)}) serão apagados definitivamente e não poderão ser recuperados " +
+                        "por este celular. Se algum deles for importante e não tiver backup, restaure antes."
+                )
+            },
+            confirmButton = {
+                TextButton(onClick = {
+                    confirm = false
+                    val sender = deleteRequest(chosen.map { it.uri })
+                    if (sender != null) {
+                        pending = chosen
+                        restoring = false
+                        launcher.launch(IntentSenderRequest.Builder(sender).build())
+                    }
+                }) { Text("Apagar de vez") }
             },
             dismissButton = { TextButton(onClick = { confirm = false }) { Text("Cancelar") } }
         )

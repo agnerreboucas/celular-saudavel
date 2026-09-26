@@ -8,6 +8,7 @@ import android.content.IntentSender
 import android.content.pm.PackageManager
 import android.net.Uri
 import android.os.Build
+import android.os.Bundle
 import android.os.Environment
 import android.os.StatFs
 import android.os.storage.StorageManager
@@ -87,6 +88,56 @@ class MediaRepository(private val context: Context) {
         }
         return out
     }
+
+    /** Itens na lixeira do sistema (Android 11+): fotos, vídeos e áudios. */
+    fun trashed(): List<MediaFile> {
+        if (Build.VERSION.SDK_INT < 30) return emptyList()
+        val out = ArrayList<MediaFile>()
+        listOf(
+            MediaStore.Images.Media.EXTERNAL_CONTENT_URI to false,
+            MediaStore.Video.Media.EXTERNAL_CONTENT_URI to true,
+            MediaStore.Audio.Media.EXTERNAL_CONTENT_URI to false
+        ).forEach { (collection, isVideo) ->
+            val projection = arrayOf(
+                MediaStore.MediaColumns._ID,
+                MediaStore.MediaColumns.DISPLAY_NAME,
+                MediaStore.MediaColumns.SIZE,
+                MediaStore.MediaColumns.MIME_TYPE,
+                MediaStore.MediaColumns.DATE_MODIFIED,
+                MediaStore.MediaColumns.DATE_EXPIRES
+            )
+            val args = Bundle().apply {
+                putInt(MediaStore.QUERY_ARG_MATCH_TRASHED, MediaStore.MATCH_ONLY)
+            }
+            try {
+                resolver.query(collection, projection, args, null)?.use { c ->
+                    val idCol = c.getColumnIndexOrThrow(MediaStore.MediaColumns._ID)
+                    val nameCol = c.getColumnIndexOrThrow(MediaStore.MediaColumns.DISPLAY_NAME)
+                    val sizeCol = c.getColumnIndexOrThrow(MediaStore.MediaColumns.SIZE)
+                    val mimeCol = c.getColumnIndexOrThrow(MediaStore.MediaColumns.MIME_TYPE)
+                    val dateCol = c.getColumnIndexOrThrow(MediaStore.MediaColumns.DATE_MODIFIED)
+                    val expCol = c.getColumnIndexOrThrow(MediaStore.MediaColumns.DATE_EXPIRES)
+                    while (c.moveToNext()) {
+                        out += MediaFile(
+                            uri = ContentUris.withAppendedId(collection, c.getLong(idCol)),
+                            name = c.getString(nameCol) ?: "Sem nome",
+                            sizeBytes = c.getLong(sizeCol),
+                            mimeType = c.getString(mimeCol) ?: "",
+                            dateModifiedSec = c.getLong(dateCol),
+                            isVideo = isVideo,
+                            expiresSec = c.getLong(expCol)
+                        )
+                    }
+                }
+            } catch (_: Exception) {
+            }
+        }
+        return out.sortedByDescending { it.sizeBytes }
+    }
+
+    /** Tira da lixeira e devolve à galeria. */
+    fun restoreRequest(uris: List<Uri>): IntentSender? =
+        if (Build.VERSION.SDK_INT >= 30) MediaStore.createTrashRequest(resolver, uris, false).intentSender else null
 
     fun images(): List<MediaFile> = query(MediaStore.Images.Media.EXTERNAL_CONTENT_URI, false)
     fun videos(): List<MediaFile> = query(MediaStore.Video.Media.EXTERNAL_CONTENT_URI, true)

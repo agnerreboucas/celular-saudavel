@@ -2,6 +2,7 @@ package br.com.celularsaudavel.ui.screens
 
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.foundation.lazy.items
 import androidx.compose.material3.*
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Modifier
@@ -19,6 +20,7 @@ val ColorVideos = Color(0xFF3B6FB6)
 val ColorApps = Color(0xFFD08A2E)
 val ColorAudio = Color(0xFF9B6BC4)
 val ColorOther = Color(0xFFB8BCB5)
+val ColorTrash = Color(0xFF7A6F5C)
 
 @Composable
 fun HomeScreen(
@@ -27,7 +29,13 @@ fun HomeScreen(
     onOpenClean: () -> Unit,
     onOpenDuplicates: () -> Unit,
     onOpenVideos: () -> Unit,
+    onOpenTrash: () -> Unit,
     onOpenApps: () -> Unit,
+    onOpenUnused: () -> Unit,
+    onOpenCache: () -> Unit,
+    onOpenUsageSettings: () -> Unit,
+    onUninstall: (br.com.celularsaudavel.model.InstalledApp) -> Unit,
+    onOpenAppSettings: (br.com.celularsaudavel.model.InstalledApp) -> Unit,
     onOpenBackup: () -> Unit,
     onOpenPermissions: () -> Unit,
 ) {
@@ -130,21 +138,27 @@ fun HomeScreen(
                         } else {
                             val apps = state.appsBytes ?: 0L
                             val known = m.images.bytes + m.videos.bytes + m.audio.bytes + apps
-                            val other = (st.usedBytes - known).coerceAtLeast(0)
+                            val trash = state.trashBytes
+                            val other = (st.usedBytes - known - trash).coerceAtLeast(0)
                             SegmentedBar(
                                 listOf(
                                     m.images.bytes / total to ColorPhotos,
                                     m.videos.bytes / total to ColorVideos,
                                     apps / total to ColorApps,
                                     m.audio.bytes / total to ColorAudio,
+                                    trash / total to ColorTrash,
                                     other / total to ColorOther,
                                 )
                             )
                             Spacer(Modifier.height(12.dp))
-                            LegendDot(ColorPhotos, "Fotos (${formatCount(m.images.count)})", formatBytes(m.images.bytes))
-                            LegendDot(ColorVideos, "Vídeos (${formatCount(m.videos.count)})", formatBytes(m.videos.bytes))
-                            if (state.appsBytes != null) LegendDot(ColorApps, "Aplicativos", formatBytes(apps))
+                            Text("Toque para revisar", color = CS.Muted, fontSize = 12.sp)
+                            LegendDot(ColorPhotos, "Fotos (${formatCount(m.images.count)})", formatBytes(m.images.bytes), onOpenDuplicates)
+                            LegendDot(ColorVideos, "Vídeos (${formatCount(m.videos.count)})", formatBytes(m.videos.bytes), onOpenVideos)
+                            LegendDot(ColorApps, "Aplicativos", if (state.appsBytes != null) formatBytes(apps) else "ver lista", onOpenApps)
                             LegendDot(ColorAudio, "Áudios", formatBytes(m.audio.bytes))
+                            if (state.trash.isNotEmpty()) {
+                                LegendDot(ColorTrash, "Lixeira (${formatCount(state.trash.size)})", formatBytes(trash), onOpenTrash)
+                            }
                             LegendDot(
                                 ColorOther,
                                 if (state.appsBytes != null) "Sistema e outros" else "Apps, sistema e outros",
@@ -187,16 +201,51 @@ fun HomeScreen(
                     onClick = onOpenVideos
                 )
             }
-            item {
-                RowCard(
-                    "📱", "Aplicativos",
-                    when {
-                        !state.usageAccess -> "Libere o acesso de uso para ver os pouco usados"
-                        state.unusedApps.isNotEmpty() -> "${state.unusedApps.size} sem uso há 90+ dias · ${formatBytes(state.unusedAppsBytes)}"
-                        else -> "Nenhum app parado há mais de 90 dias"
-                    },
-                    onClick = onOpenApps
-                )
+            if (state.trash.isNotEmpty()) {
+                item {
+                    RowCard(
+                        "🗑️", "Lixeira",
+                        "${formatCount(state.trash.size)} itens · ${formatBytes(state.trashBytes)} ainda ocupando espaço",
+                        onClick = onOpenTrash
+                    )
+                }
+            }
+            if (!state.usageAccess) {
+                item {
+                    Notice(
+                        "Libere o \"Acesso ao uso\" para ver aqui os apps parados e o cache de cada app.",
+                        action = "Liberar acesso de uso",
+                        onAction = onOpenUsageSettings
+                    )
+                }
+            } else {
+                item {
+                    RowCard(
+                        "🧽", "Cache dos aplicativos",
+                        if (state.cacheBytes > 0) "${formatBytes(state.cacheBytes)} em ${state.appsWithCache} apps · limpar sem perder dados"
+                        else "Nenhum cache relevante",
+                        onClick = onOpenCache
+                    )
+                }
+                if (state.unusedApps.isNotEmpty()) {
+                    item {
+                        Row(verticalAlignment = androidx.compose.ui.Alignment.CenterVertically, modifier = Modifier.padding(top = 8.dp)) {
+                            Column(Modifier.weight(1f)) {
+                                Text("Apps parados há 90+ dias", fontSize = 18.sp, fontWeight = FontWeight.Bold, color = CS.Ink)
+                                Text(
+                                    "${state.unusedApps.size} apps · ${formatBytes(state.unusedAppsBytes)}",
+                                    color = CS.Muted, fontSize = 14.sp
+                                )
+                            }
+                            TextButton(onClick = onOpenUnused) { Text("Ver todos", color = CS.Ink) }
+                        }
+                    }
+                    items(state.unusedApps.take(5), key = { "unused-" + it.packageName }) { app ->
+                        AppCard(app, usageAccess = true, cacheFirst = false, onUninstall = onUninstall, onOpenAppSettings = onOpenAppSettings)
+                    }
+                } else {
+                    item { RowCard("📱", "Aplicativos", "Nenhum app parado há mais de 90 dias", onClick = onOpenApps) }
+                }
             }
             state.media?.let { m ->
                 item {

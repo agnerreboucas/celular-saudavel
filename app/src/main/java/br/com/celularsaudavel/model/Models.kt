@@ -23,7 +23,9 @@ data class MediaFile(
     val sizeBytes: Long,
     val mimeType: String,
     val dateModifiedSec: Long,
-    val isVideo: Boolean
+    val isVideo: Boolean,
+    /** Só para itens na lixeira: quando o Android apaga sozinho (segundos). */
+    val expiresSec: Long = 0
 )
 
 /** Arquivos com conteúdo idêntico. O primeiro (mais antigo) é tratado como original. */
@@ -39,6 +41,10 @@ data class InstalledApp(
     val sizeBytes: Long,
     /** true = só o tamanho do instalador (sem dados/cache), por falta do acesso de uso */
     val sizeIsEstimate: Boolean,
+    /** Cache do app; null quando o acesso de uso não foi liberado. */
+    val cacheBytes: Long? = null,
+    /** false para apps do sistema (ex.: a tela inicial), que não podem ser desinstalados */
+    val removable: Boolean = true,
     val installTime: Long,
     /** null = sem registro de uso no último ano (ou acesso de uso não liberado) */
     val lastUsed: Long?
@@ -49,7 +55,8 @@ enum class MediaAccess { NONE, PARTIAL, FULL }
 enum class HistoryType(val label: String) {
     DUPLICATES_REMOVED("Duplicadas removidas"),
     VIDEOS_TRASHED("Vídeos enviados à lixeira"),
-    APP_UNINSTALLED("Aplicativo desinstalado")
+    APP_UNINSTALLED("Aplicativo desinstalado"),
+    TRASH_DELETED("Apagados da lixeira")
 }
 
 data class HistoryEntry(

@@ -37,6 +37,7 @@ data class UiState(
     val media: MediaSummary? = null,
     val largeVideos: List<MediaFile> = emptyList(),
     val duplicates: List<DuplicateGroup> = emptyList(),
+    val trash: List<MediaFile> = emptyList(),
 
     val appsLoading: Boolean = false,
     val appsLoaded: Boolean = false,
@@ -47,17 +48,20 @@ data class UiState(
     val duplicateBytes: Long get() = duplicates.sumOf { it.wastedBytes }
     val duplicateCount: Int get() = duplicates.sumOf { it.copies.size }
     val largeVideoBytes: Long get() = largeVideos.sumOf { it.sizeBytes }
-    val unusedApps: List<InstalledApp> get() = if (usageAccess) apps.filter { it.isUnused() } else emptyList()
+    val trashBytes: Long get() = trash.sumOf { it.sizeBytes }
+    val unusedApps: List<InstalledApp> get() = if (usageAccess) apps.filter { it.removable && it.isUnused() }.sortedByDescending { it.sizeBytes } else emptyList()
     val unusedAppsBytes: Long get() = unusedApps.sumOf { it.sizeBytes }
+    val cacheBytes: Long get() = apps.sumOf { it.cacheBytes ?: 0L }
+    val appsWithCache: Int get() = apps.count { (it.cacheBytes ?: 0L) > 10_000_000L }
     val appsBytes: Long? get() = if (usageAccess && appsLoaded) apps.sumOf { it.sizeBytes } else null
 
     /** Espaço que dá para revisar: cópias duplicadas + vídeos grandes + apps sem uso. */
-    val reviewableBytes: Long get() = duplicateBytes + largeVideoBytes + unusedAppsBytes
+    val reviewableBytes: Long get() = duplicateBytes + largeVideoBytes + unusedAppsBytes + trashBytes
 
     val health: HealthScore?
         get() = if (!scanned) null else computeHealth(
             storage,
-            reclaimableBytes = duplicateBytes + largeVideoBytes,
+            reclaimableBytes = duplicateBytes + largeVideoBytes + trashBytes,
             unusedApps = if (usageAccess && appsLoaded) unusedApps.size else null
         )
 
@@ -106,6 +110,7 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
             val videos = media.videos()
             val summary = media.summary(images, videos)
             val large = media.largeVideos(videos)
+            val trash = media.trashed()
 
             _state.update { it.copy(scanStep = "Procurando duplicadas…", scanProgress = 0f) }
             val dups = media.findDuplicates(images + videos) { done, total ->
@@ -129,6 +134,7 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
                     media = summary,
                     largeVideos = large,
                     duplicates = dups,
+                    trash = trash,
                     apps = apps,
                     appsLoaded = true,
                     scanned = true,
@@ -149,6 +155,17 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
         }
     }
 
+    fun loadTrash() {
+        viewModelScope.launch(Dispatchers.IO) {
+            val t = media.trashed()
+            _state.update { it.copy(trash = t, storage = media.storageInfo()) }
+        }
+    }
+
+    fun restoreRequest(uris: List<Uri>) = media.restoreRequest(uris)
+
+    fun onTrashRestored() = loadTrash()
+
     fun deleteRequest(uris: List<Uri>) = media.deleteRequest(uris)
     fun trashRequest(uris: List<Uri>) = media.trashRequest(uris)
 
@@ -166,9 +183,11 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
                 duplicates = s.duplicates
                     .map { g -> DuplicateGroup(g.files.filterNot { it.uri in uris }) }
                     .filter { it.files.size > 1 },
+                trash = s.trash.filterNot { it.uri in uris },
                 storage = media.storageInfo()
             )
         }
+        if (type == HistoryType.VIDEOS_TRASHED) loadTrash()
     }
 
     fun onUninstallFinished(app: InstalledApp) {

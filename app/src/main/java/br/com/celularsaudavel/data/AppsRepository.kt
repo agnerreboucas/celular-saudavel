@@ -4,6 +4,7 @@ import android.app.AppOpsManager
 import android.app.usage.StorageStatsManager
 import android.app.usage.UsageStatsManager
 import android.content.Context
+import android.content.Intent
 import android.content.pm.ApplicationInfo
 import android.content.pm.PackageManager
 import android.os.Build
@@ -38,20 +39,29 @@ class AppsRepository(private val context: Context) {
         val lastUsedMap = if (usage) lastUsedTimes() else emptyMap()
         val ssm = context.getSystemService(StorageStatsManager::class.java)
 
+        val launcher = try {
+            pm.resolveActivity(
+                Intent(Intent.ACTION_MAIN).addCategory(Intent.CATEGORY_HOME), 0
+            )?.activityInfo?.packageName
+        } catch (_: Exception) {
+            null
+        }
         return pm.getInstalledApplications(0)
-            .filter { (it.flags and ApplicationInfo.FLAG_SYSTEM) == 0 }
+            .filter { (it.flags and ApplicationInfo.FLAG_SYSTEM) == 0 || it.packageName == launcher }
             .filter { it.packageName != context.packageName }
             .mapNotNull { ai ->
                 try {
                     val pi = pm.getPackageInfo(ai.packageName, 0)
                     var size = 0L
                     var estimate = true
+                    var cache: Long? = null
                     if (usage && ssm != null) {
                         try {
                             val st = ssm.queryStatsForPackage(
                                 StorageManager.UUID_DEFAULT, ai.packageName, Process.myUserHandle()
                             )
                             size = st.appBytes + st.dataBytes + st.cacheBytes
+                            cache = st.cacheBytes
                             estimate = false
                         } catch (_: Exception) {
                         }
@@ -65,6 +75,8 @@ class AppsRepository(private val context: Context) {
                         name = ai.loadLabel(pm).toString(),
                         sizeBytes = size,
                         sizeIsEstimate = estimate,
+                        cacheBytes = cache,
+                        removable = (ai.flags and ApplicationInfo.FLAG_SYSTEM) == 0,
                         installTime = pi.firstInstallTime,
                         lastUsed = lastUsedMap[ai.packageName]
                     )

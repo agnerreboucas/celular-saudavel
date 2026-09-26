@@ -191,8 +191,15 @@ fun SegmentedBar(parts: List<Pair<Float, Color>>, modifier: Modifier = Modifier)
 }
 
 @Composable
-fun LegendDot(color: Color, label: String, value: String) {
-    Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.padding(vertical = 3.dp)) {
+fun LegendDot(color: Color, label: String, value: String, onClick: (() -> Unit)? = null) {
+    val base = Modifier
+        .fillMaxWidth()
+        .clip(RoundedCornerShape(10.dp))
+    Row(
+        verticalAlignment = Alignment.CenterVertically,
+        modifier = (if (onClick != null) base.clickable(onClick = onClick) else base)
+            .padding(vertical = if (onClick != null) 8.dp else 3.dp)
+    ) {
         Box(
             Modifier
                 .size(10.dp)
@@ -202,6 +209,10 @@ fun LegendDot(color: Color, label: String, value: String) {
         Spacer(Modifier.width(8.dp))
         Text(label, color = CS.Ink, fontSize = 14.sp, modifier = Modifier.weight(1f))
         Text(value, color = CS.Muted, fontSize = 14.sp)
+        if (onClick != null) {
+            Spacer(Modifier.width(6.dp))
+            Text("›", color = CS.Muted, fontSize = 20.sp)
+        }
     }
 }
 
