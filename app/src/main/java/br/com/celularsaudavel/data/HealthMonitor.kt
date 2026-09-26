@@ -64,6 +64,28 @@ class MonitorPrefs(context: Context) {
     var lastBackupAt: Long
         get() = p.getLong("lastBackupAt", 0)
         set(v) = p.edit().putLong("lastBackupAt", v).apply()
+
+    var dailyEnabled: Boolean
+        get() = p.getBoolean("daily", true)
+        set(v) = p.edit().putBoolean("daily", v).apply()
+
+    /** Hora do boletim diário (0–23). Padrão: 5h. */
+    var dailyHour: Int
+        get() = p.getInt("dailyHour", 5)
+        set(v) = p.edit().putInt("dailyHour", v).apply()
+
+    /** Último índice completo calculado no app (com duplicadas, apps etc.). */
+    var lastScore: Int
+        get() = p.getInt("lastScore", -1)
+        set(v) = p.edit().putInt("lastScore", v).apply()
+
+    var lastScoreAt: Long
+        get() = p.getLong("lastScoreAt", 0)
+        set(v) = p.edit().putLong("lastScoreAt", v).apply()
+
+    var usedAtLastDaily: Long
+        get() = p.getLong("usedAtLastDaily", 0)
+        set(v) = p.edit().putLong("usedAtLastDaily", v).apply()
 }
 
 object HealthNotifier {
@@ -73,7 +95,9 @@ object HealthNotifier {
         Build.VERSION.SDK_INT < 33 ||
             context.checkSelfPermission(android.Manifest.permission.POST_NOTIFICATIONS) == PackageManager.PERMISSION_GRANTED
 
-    fun notify(context: Context, id: Int, title: String, text: String) {
+    const val CHANNEL_DAILY = "boletim"
+
+    fun notify(context: Context, id: Int, title: String, text: String, channel: String = CHANNEL) {
         if (!canNotify(context)) return
         val nm = context.getSystemService(NotificationManager::class.java)
         if (nm.getNotificationChannel(CHANNEL) == null) {
@@ -83,12 +107,20 @@ object HealthNotifier {
                 }
             )
         }
+        if (nm.getNotificationChannel(CHANNEL_DAILY) == null) {
+            // Silencioso: chega de madrugada sem som nem vibração e espera a pessoa acordar.
+            nm.createNotificationChannel(
+                NotificationChannel(CHANNEL_DAILY, "Boletim diário", NotificationManager.IMPORTANCE_LOW).apply {
+                    description = "Resumo diário da saúde do celular, sem som"
+                }
+            )
+        }
         val open = PendingIntent.getActivity(
             context, 0,
             Intent(context, MainActivity::class.java).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TOP),
             PendingIntent.FLAG_IMMUTABLE or PendingIntent.FLAG_UPDATE_CURRENT
         )
-        val n = NotificationCompat.Builder(context, CHANNEL)
+        val n = NotificationCompat.Builder(context, channel)
             .setSmallIcon(R.drawable.ic_launcher_foreground)
             .setColor(0xFF1E7F55.toInt())
             .setContentTitle(title)

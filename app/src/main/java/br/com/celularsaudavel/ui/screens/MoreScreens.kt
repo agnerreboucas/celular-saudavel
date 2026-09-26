@@ -1,6 +1,8 @@
 package br.com.celularsaudavel.ui.screens
 
+import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.*
+import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.material3.*
@@ -233,6 +235,8 @@ fun MonitorScreen(
     onAllowNotifications: () -> Unit,
     onTest: () -> Unit,
     onOpenPremium: () -> Unit,
+    onSetDaily: (enabled: Boolean?, hour: Int?) -> Unit,
+    onTestDaily: () -> Unit,
 ) {
     val m = state.monitor
     LazyColumn(
@@ -269,6 +273,23 @@ fun MonitorScreen(
                         }
                         HorizontalDivider(Modifier.padding(vertical = 8.dp), color = CS.Surface2)
                         if (state.premium) {
+                            SwitchRow(
+                                "Boletim diário às ${m.dailyHour}h",
+                                "Todo dia, o índice de saúde e o espaço livre. Chega sem som, para não acordar ninguém.",
+                                m.dailyEnabled
+                            ) { onSetDaily(it, null) }
+                            if (m.dailyEnabled) {
+                                Row(
+                                    Modifier.horizontalScroll(rememberScrollState()).padding(top = 8.dp),
+                                    horizontalArrangement = Arrangement.spacedBy(8.dp)
+                                ) {
+                                    listOf(5, 6, 7, 8, 12, 20).forEach { hr ->
+                                        Pill("${hr}h", m.dailyHour == hr) { onSetDaily(null, hr) }
+                                    }
+                                }
+                                TextButton(onClick = onTestDaily) { Text("Ver como chega o boletim", color = CS.Ink) }
+                            }
+                            HorizontalDivider(Modifier.padding(vertical = 8.dp), color = CS.Surface2)
                             SwitchRow("Check-up semanal", "Índice de saúde, espaço livre e quanto o celular encheu na semana.", m.weeklyCheckup) {
                                 onSet(null, null, it, null)
                             }
@@ -278,7 +299,7 @@ fun MonitorScreen(
                             }
                         } else {
                             Text(
-                                "⭐ Check-up semanal e lembrete de backup fazem parte do Premium.",
+                                "⭐ Boletim diário, check-up semanal e lembrete de backup fazem parte do Premium.",
                                 color = CS.Green, fontSize = 14.sp
                             )
                             TextButton(onClick = onOpenPremium) { Text("Conhecer o Premium", color = CS.Ink) }

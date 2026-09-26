@@ -443,7 +443,9 @@ fun AppRoot(vm: MainViewModel = viewModel()) {
                         else openAppSettings()
                     },
                     onTest = vm::testNotifications,
-                    onOpenPremium = { sub = "premium" }
+                    onOpenPremium = { sub = "premium" },
+                    onSetDaily = { e, h -> vm.setDaily(e, h) },
+                    onTestDaily = vm::testDaily
                 )
                 sub == "premium" -> PremiumScreen(
                     state, onBack = { sub = null },

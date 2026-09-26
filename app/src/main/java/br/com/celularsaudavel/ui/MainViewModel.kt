@@ -10,6 +10,7 @@ import androidx.work.WorkManager
 import br.com.celularsaudavel.BuildConfig
 import br.com.celularsaudavel.data.AppsRepository
 import br.com.celularsaudavel.data.BillingRepository
+import br.com.celularsaudavel.data.DailyBulletin
 import br.com.celularsaudavel.data.BillingUi
 import br.com.celularsaudavel.data.BackupDb
 import br.com.celularsaudavel.data.BackupRow
@@ -73,6 +74,8 @@ data class MonitorUi(
     val weeklyCheckup: Boolean = true,
     val backupReminder: Boolean = true,
     val canNotify: Boolean = false,
+    val dailyEnabled: Boolean = true,
+    val dailyHour: Int = 5,
 )
 
 /** Resultado de uma limpeza, mostrado como comemoração. */
@@ -183,6 +186,7 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
             }
         }
         if (monitorPrefs.enabled) HealthMonitorWorker.schedule(app)
+        runCatching { DailyBulletin.schedule(app) }
         refreshBasics()
         _state.update { it.copy(drive = it.drive.copy(connected = drive.connected)) }
         viewModelScope.launch {
@@ -276,6 +280,10 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
                     scanStep = "",
                     scanProgress = null
                 )
+            }
+            _state.value.health?.let { h ->
+                monitorPrefs.lastScore = h.value
+                monitorPrefs.lastScoreAt = System.currentTimeMillis()
             }
             refreshBackupSummary()
         }
@@ -470,13 +478,27 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
         storageAlerts = monitorPrefs.storageAlerts,
         weeklyCheckup = monitorPrefs.weeklyCheckup,
         backupReminder = monitorPrefs.backupReminder,
-        canNotify = HealthNotifier.canNotify(getApplication())
+        canNotify = HealthNotifier.canNotify(getApplication()),
+        dailyEnabled = monitorPrefs.dailyEnabled,
+        dailyHour = monitorPrefs.dailyHour,
     )
+
+    fun setDaily(enabled: Boolean? = null, hour: Int? = null) {
+        enabled?.let { monitorPrefs.dailyEnabled = it }
+        hour?.let { monitorPrefs.dailyHour = it }
+        DailyBulletin.schedule(getApplication())
+        _state.update { it.copy(monitor = monitorUi()) }
+    }
+
+    fun testDaily() {
+        viewModelScope.launch(Dispatchers.IO) { DailyBulletin.send(getApplication()) }
+    }
 
     fun setMonitor(enabled: Boolean? = null, storage: Boolean? = null, weekly: Boolean? = null, backup: Boolean? = null) {
         enabled?.let {
             monitorPrefs.enabled = it
             if (it) HealthMonitorWorker.schedule(getApplication()) else HealthMonitorWorker.cancel(getApplication())
+            DailyBulletin.schedule(getApplication())
         }
         storage?.let { monitorPrefs.storageAlerts = it }
         weekly?.let { monitorPrefs.weeklyCheckup = it }
