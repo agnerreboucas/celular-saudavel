@@ -102,8 +102,10 @@ fun CleanScreen(
                 )
             }
 
-            item { SectionTitle("Pastas: WhatsApp, Downloads e temporários") }
-            if (!state.folderAccess) {
+            if (state.foldersFeature) item { SectionTitle("Pastas: WhatsApp, Downloads e temporários") }
+            if (!state.foldersFeature) {
+                // Versão da Play: a leitura de pastas ocultas não está disponível.
+            } else if (!state.folderAccess) {
                 item {
                     Notice(
                         "O WhatsApp, os Downloads e os temporários ficam em pastas que a permissão de fotos não mostra, algumas ocultas. " +

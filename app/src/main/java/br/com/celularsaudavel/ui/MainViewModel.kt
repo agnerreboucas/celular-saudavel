@@ -7,7 +7,10 @@ import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.viewModelScope
 import androidx.work.WorkInfo
 import androidx.work.WorkManager
+import br.com.celularsaudavel.BuildConfig
 import br.com.celularsaudavel.data.AppsRepository
+import br.com.celularsaudavel.data.BillingRepository
+import br.com.celularsaudavel.data.BillingUi
 import br.com.celularsaudavel.data.BackupDb
 import br.com.celularsaudavel.data.BackupRow
 import br.com.celularsaudavel.data.BackupState
@@ -97,8 +100,12 @@ data class UiState(
 
     val drive: DriveUi = DriveUi(),
     val monitor: MonitorUi = MonitorUi(),
+    val billing: BillingUi = BillingUi(),
     val history: List<HistoryEntry> = emptyList(),
 ) {
+    /** Versão completa (APK direto) libera tudo; na Play depende da assinatura. */
+    val premium: Boolean get() = BuildConfig.PREMIUM_FREE || billing.premium
+    val foldersFeature: Boolean get() = BuildConfig.FOLDERS_ENABLED
     val duplicateBytes: Long get() = duplicates.sumOf { it.wastedBytes }
     val duplicateCount: Int get() = duplicates.sumOf { it.copies.size }
     val sequenceCount: Int get() = sequences.sumOf { it.files.size }
@@ -141,6 +148,7 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
     private val drive = DriveRepository(app)
     private val backupDb = BackupDb(app)
     private val monitorPrefs = MonitorPrefs(app)
+    val billing = BillingRepository(app)
 
     private var images: List<MediaFile> = emptyList()
     private var videos: List<MediaFile> = emptyList()
@@ -149,6 +157,12 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
     val state: StateFlow<UiState> = _state.asStateFlow()
 
     init {
+        if (!BuildConfig.PREMIUM_FREE) {
+            billing.start()
+            viewModelScope.launch {
+                billing.ui.collect { b -> _state.update { it.copy(billing = b) } }
+            }
+        }
         if (monitorPrefs.enabled) HealthMonitorWorker.schedule(app)
         refreshBasics()
         _state.update { it.copy(drive = it.drive.copy(connected = drive.connected)) }

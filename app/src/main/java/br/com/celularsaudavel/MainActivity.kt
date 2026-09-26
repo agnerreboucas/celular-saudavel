@@ -59,6 +59,7 @@ import br.com.celularsaudavel.ui.screens.HistoryScreen
 import br.com.celularsaudavel.ui.screens.HomeScreen
 import br.com.celularsaudavel.ui.screens.LargeVideosScreen
 import br.com.celularsaudavel.ui.screens.MonitorScreen
+import br.com.celularsaudavel.ui.screens.PremiumScreen
 import br.com.celularsaudavel.ui.screens.MoreScreen
 import br.com.celularsaudavel.ui.screens.PermissionsScreen
 import br.com.celularsaudavel.ui.screens.PrivacyScreen
@@ -361,7 +362,21 @@ fun AppRoot(vm: MainViewModel = viewModel()) {
                         if (Build.VERSION.SDK_INT >= 33) monitorNotifLauncher.launch(Manifest.permission.POST_NOTIFICATIONS)
                         else openAppSettings()
                     },
-                    onTest = vm::testNotifications
+                    onTest = vm::testNotifications,
+                    onOpenPremium = { sub = "premium" }
+                )
+                sub == "premium" -> PremiumScreen(
+                    state, onBack = { sub = null },
+                    onBuy = { plan -> (context as? Activity)?.let { vm.billing.buy(it, plan) } },
+                    onRestore = vm.billing::restore,
+                    onManage = {
+                        context.safeStart(
+                            Intent(
+                                Intent.ACTION_VIEW,
+                                Uri.parse("https://play.google.com/store/account/subscriptions?sku=premium&package=${context.packageName}")
+                            )
+                        )
+                    }
                 )
 
                 tab == TAB_HOME -> HomeScreen(
@@ -404,6 +419,7 @@ fun AppRoot(vm: MainViewModel = viewModel()) {
                     onRetry = vm::retryFailed,
                     onFree = freeSpace,
                     onRefresh = vm::loadDriveAccount,
+                    onOpenPremium = { sub = "premium" },
                 )
                 tab == TAB_APPS -> AppsScreen(
                     state,
@@ -419,6 +435,7 @@ fun AppRoot(vm: MainViewModel = viewModel()) {
                     onOpenPermissions = { sub = "perms" },
                     onOpenPrivacy = { sub = "privacy" },
                     onOpenMonitor = { sub = "monitor" },
+                    onOpenPremium = { sub = "premium" },
                 )
             }
         }

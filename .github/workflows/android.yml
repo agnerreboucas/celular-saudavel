@@ -1,4 +1,4 @@
-name: Gerar APK
+name: Gerar APK e AAB
 
 on:
   push:
@@ -21,26 +21,46 @@ jobs:
 
       - uses: gradle/actions/setup-gradle@v4
 
-      - name: Compilar APK
+      # Opcional: chave de envio da Play guardada nos segredos do repositório.
+      - name: Preparar chave de envio (se existir)
+        env:
+          UPLOAD_KEYSTORE_BASE64: ${{ secrets.UPLOAD_KEYSTORE_BASE64 }}
+        run: |
+          if [ -n "$UPLOAD_KEYSTORE_BASE64" ]; then
+            echo "$UPLOAD_KEYSTORE_BASE64" | base64 -d > "$RUNNER_TEMP/upload.jks"
+            echo "UPLOAD_KEYSTORE_PATH=$RUNNER_TEMP/upload.jks" >> "$GITHUB_ENV"
+          fi
+
+      - name: Compilar
+        env:
+          UPLOAD_KEYSTORE_PASSWORD: ${{ secrets.UPLOAD_KEYSTORE_PASSWORD }}
+          UPLOAD_KEY_ALIAS: ${{ secrets.UPLOAD_KEY_ALIAS }}
+          UPLOAD_KEY_PASSWORD: ${{ secrets.UPLOAD_KEY_PASSWORD }}
         run: |
           chmod +x gradlew
-          ./gradlew assembleRelease --stacktrace --no-daemon
+          ./gradlew assembleFullRelease bundlePlayRelease --stacktrace --no-daemon
 
       - name: Renomear
-        run: cp app/build/outputs/apk/release/app-release.apk CelularSaudavel.apk
+        run: |
+          cp app/build/outputs/apk/full/release/app-full-release.apk CelularSaudavel.apk
+          cp app/build/outputs/bundle/playRelease/app-play-release.aab CelularSaudavel-play.aab
 
       - uses: actions/upload-artifact@v4
         with:
-          name: CelularSaudavel-apk
-          path: CelularSaudavel.apk
+          name: CelularSaudavel
+          path: |
+            CelularSaudavel.apk
+            CelularSaudavel-play.aab
 
       - name: Publicar para download
         uses: softprops/action-gh-release@v2
         with:
           tag_name: build-${{ github.run_number }}
-          name: Celular Saudável — teste ${{ github.run_number }}
+          name: Celular Saudável — build ${{ github.run_number }}
           body: |
-            Baixe **CelularSaudavel.apk** abaixo no celular Android e toque para instalar.
-            Versão de teste, assinada com chave de desenvolvimento.
-          files: CelularSaudavel.apk
+            **CelularSaudavel.apk**: versão completa para instalar direto no celular.
+            **CelularSaudavel-play.aab**: versão para enviar ao Google Play Console.
+          files: |
+            CelularSaudavel.apk
+            CelularSaudavel-play.aab
           make_latest: true

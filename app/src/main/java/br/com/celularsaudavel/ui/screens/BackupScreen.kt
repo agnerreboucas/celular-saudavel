@@ -27,6 +27,7 @@ fun BackupScreen(
     onRetry: (Boolean) -> Unit,
     onFree: () -> Unit,
     onRefresh: () -> Unit,
+    onOpenPremium: () -> Unit,
 ) {
     val d = state.drive
     var sel by rememberSaveable { mutableStateOf(setOf(BackupCat.CAMERA)) }
@@ -42,6 +43,17 @@ fun BackupScreen(
         verticalArrangement = ListSpacing
     ) {
         item { ScreenHeader("Backup", "Proteja no seu Google Drive antes de liberar espaço.") }
+        if (!state.premium) {
+            item {
+                PremiumLock(
+                    "Backup verificado é Premium",
+                    "Envie fotos e vídeos para o SEU Google Drive, confira cada arquivo e só então libere espaço no celular." +
+                        (state.media?.let { " Você tem ${formatBytes(it.images.bytes + it.videos.bytes)} em fotos e vídeos para proteger." } ?: ""),
+                    onOpenPremium
+                )
+            }
+            return@LazyColumn
+        }
 
         // ---------- Conexão ----------
         item {

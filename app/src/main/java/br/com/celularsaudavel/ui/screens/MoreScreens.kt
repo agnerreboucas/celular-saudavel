@@ -24,6 +24,7 @@ fun MoreScreen(
     onOpenPermissions: () -> Unit,
     onOpenPrivacy: () -> Unit,
     onOpenMonitor: () -> Unit,
+    onOpenPremium: () -> Unit,
 ) {
     LazyColumn(
         modifier = Modifier.fillMaxSize(),
@@ -37,6 +38,15 @@ fun MoreScreen(
                 if (state.history.isEmpty()) "Nenhuma ação ainda" else "${formatBytes(state.totalFreed)} liberados até agora",
                 onClick = onOpenHistory
             )
+        }
+        if (!br.com.celularsaudavel.BuildConfig.PREMIUM_FREE) {
+            item {
+                RowCard(
+                    "⭐", "Premium",
+                    if (state.premium) "Ativo · obrigado!" else "Backup verificado e check-up semanal",
+                    onClick = onOpenPremium
+                )
+            }
         }
         item {
             RowCard(
@@ -129,7 +139,7 @@ fun PermissionsScreen(
                 actions = listOf("Pedir acesso" to onRequestMedia, "Abrir ajustes do app" to onOpenAppSettings)
             )
         }
-        item {
+        if (state.foldersFeature) item {
             PermissionCard(
                 "Acesso a todos os arquivos",
                 "Para analisar pastas do WhatsApp (inclusive as ocultas), Telegram, Downloads e temporários.",
@@ -220,6 +230,7 @@ fun MonitorScreen(
     onSet: (enabled: Boolean?, storage: Boolean?, weekly: Boolean?, backup: Boolean?) -> Unit,
     onAllowNotifications: () -> Unit,
     onTest: () -> Unit,
+    onOpenPremium: () -> Unit,
 ) {
     val m = state.monitor
     LazyColumn(
@@ -255,12 +266,20 @@ fun MonitorScreen(
                             onSet(null, it, null, null)
                         }
                         HorizontalDivider(Modifier.padding(vertical = 8.dp), color = CS.Surface2)
-                        SwitchRow("Check-up semanal", "Índice de saúde, espaço livre e quanto o celular encheu na semana.", m.weeklyCheckup) {
-                            onSet(null, null, it, null)
-                        }
-                        HorizontalDivider(Modifier.padding(vertical = 8.dp), color = CS.Surface2)
-                        SwitchRow("Lembrete de backup", "Se o último backup no Drive tiver mais de 30 dias.", m.backupReminder) {
-                            onSet(null, null, null, it)
+                        if (state.premium) {
+                            SwitchRow("Check-up semanal", "Índice de saúde, espaço livre e quanto o celular encheu na semana.", m.weeklyCheckup) {
+                                onSet(null, null, it, null)
+                            }
+                            HorizontalDivider(Modifier.padding(vertical = 8.dp), color = CS.Surface2)
+                            SwitchRow("Lembrete de backup", "Se o último backup no Drive tiver mais de 30 dias.", m.backupReminder) {
+                                onSet(null, null, null, it)
+                            }
+                        } else {
+                            Text(
+                                "⭐ Check-up semanal e lembrete de backup fazem parte do Premium.",
+                                color = CS.Green, fontSize = 14.sp
+                            )
+                            TextButton(onClick = onOpenPremium) { Text("Conhecer o Premium", color = CS.Ink) }
                         }
                     }
                 }

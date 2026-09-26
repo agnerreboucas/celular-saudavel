@@ -100,7 +100,7 @@ fun HomeScreen(
                             } else if ((state.storage?.usedFraction ?: 0f) > 0.7f) {
                                 Text(
                                     "O índice caiu porque o armazenamento está ${((state.storage?.usedFraction ?: 0f) * 100).toInt()}% ocupado. " +
-                                        "Veja as pastas ocultas e o cache dos apps para achar onde está o espaço.",
+                                        (if (state.foldersFeature) "Veja as pastas ocultas e o cache dos apps para achar onde está o espaço." else "Veja o cache e os apps parados para achar onde está o espaço."),
                                     fontSize = 15.sp, color = CS.Ink, lineHeight = 21.sp
                                 )
                                 Spacer(Modifier.height(12.dp))
@@ -224,7 +224,9 @@ fun HomeScreen(
                     onClick = onOpenVideos
                 )
             }
-            if (!state.folderAccess) {
+            if (!state.foldersFeature) {
+                // Versão da Play: sem pastas ocultas.
+            } else if (!state.folderAccess) {
                 item {
                     Notice(
                         "Boa parte do espaço pode estar em pastas ocultas do WhatsApp, Downloads e temporários. Libere o acesso para analisar.",

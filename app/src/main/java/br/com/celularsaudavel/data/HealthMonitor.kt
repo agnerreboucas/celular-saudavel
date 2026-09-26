@@ -20,6 +20,10 @@ import br.com.celularsaudavel.model.computeHealth
 import br.com.celularsaudavel.model.formatBytes
 import java.util.concurrent.TimeUnit
 
+fun isPremium(context: Context): Boolean =
+    br.com.celularsaudavel.BuildConfig.PREMIUM_FREE ||
+        context.getSharedPreferences("billing", Context.MODE_PRIVATE).getBoolean("premium", false)
+
 /** Preferências do acompanhamento. */
 class MonitorPrefs(context: Context) {
     private val p = context.getSharedPreferences("monitor", Context.MODE_PRIVATE)
@@ -155,7 +159,8 @@ class HealthMonitorWorker(ctx: Context, params: WorkerParameters) : CoroutineWor
             }
 
             // 2) Check-up semanal
-            if (prefs.weeklyCheckup && (force || now - prefs.lastWeekly > 7 * DAY_MS)) {
+            val premium = isPremium(context)
+            if (premium && prefs.weeklyCheckup && (force || now - prefs.lastWeekly > 7 * DAY_MS)) {
                 val score = computeHealth(storage, 0, null)
                 val grew = if (prefs.usedAtLastWeekly > 0) storage.usedBytes - prefs.usedAtLastWeekly else 0L
                 val growth = when {
@@ -175,7 +180,7 @@ class HealthMonitorWorker(ctx: Context, params: WorkerParameters) : CoroutineWor
 
             // 3) Lembrete de backup
             val driveConnected = DriveRepository(context).connected
-            if (prefs.backupReminder && driveConnected) {
+            if (premium && prefs.backupReminder && driveConnected) {
                 val last = prefs.lastBackupAt
                 val stale = last == 0L || now - last > 30 * DAY_MS
                 if (stale && (force || now - prefs.lastBackupReminder > 14 * DAY_MS)) {

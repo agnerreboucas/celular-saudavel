@@ -8,14 +8,14 @@ plugins {
 
 android {
     namespace = "br.com.celularsaudavel"
-    compileSdk = 35
+    compileSdk = 36
 
     defaultConfig {
         applicationId = "br.com.celularsaudavel"
         minSdk = 26
-        targetSdk = 35
-        versionCode = 5
-        versionName = "0.5.0"
+        targetSdk = 36
+        versionCode = 6
+        versionName = "1.0.0"
     }
 
     // Chave de TESTE fixa: permite atualizar o app instalado sem desinstalar.
@@ -29,13 +29,40 @@ android {
         }
     }
 
+    // Chave de ENVIO para a Play Store: fica fora do repositório (segredos do GitHub).
+    val uploadStore = System.getenv("UPLOAD_KEYSTORE_PATH")
+    if (uploadStore != null && file(uploadStore).exists()) {
+        signingConfigs.create("upload") {
+            storeFile = file(uploadStore)
+            storePassword = System.getenv("UPLOAD_KEYSTORE_PASSWORD")
+            keyAlias = System.getenv("UPLOAD_KEY_ALIAS")
+            keyPassword = System.getenv("UPLOAD_KEY_PASSWORD")
+        }
+    }
+
+    flavorDimensions += "loja"
+    productFlavors {
+        // Versão completa para instalar direto (APK): inclui pastas ocultas e tudo liberado.
+        create("full") {
+            dimension = "loja"
+            buildConfigField("boolean", "FOLDERS_ENABLED", "true")
+            buildConfigField("boolean", "PREMIUM_FREE", "true")
+        }
+        // Versão da Google Play: sem permissões restritas e com assinatura Premium.
+        create("play") {
+            dimension = "loja"
+            buildConfigField("boolean", "FOLDERS_ENABLED", "false")
+            buildConfigField("boolean", "PREMIUM_FREE", "false")
+        }
+    }
+
     buildTypes {
         getByName("debug") {
             signingConfig = signingConfigs.getByName("dev")
         }
         getByName("release") {
             isMinifyEnabled = false
-            signingConfig = signingConfigs.getByName("dev")
+            signingConfig = signingConfigs.findByName("upload") ?: signingConfigs.getByName("dev")
         }
     }
 
@@ -46,6 +73,7 @@ android {
 
     buildFeatures {
         compose = true
+        buildConfig = true
     }
 }
 
@@ -66,6 +94,7 @@ dependencies {
     implementation("org.jetbrains.kotlinx:kotlinx-coroutines-android:1.9.0")
     implementation("androidx.work:work-runtime-ktx:2.10.0")
     implementation("com.google.android.gms:play-services-auth:21.2.0")
+    implementation("com.android.billingclient:billing-ktx:7.1.1")
 
     implementation("androidx.compose.material3:material3")
     implementation("androidx.compose.foundation:foundation")

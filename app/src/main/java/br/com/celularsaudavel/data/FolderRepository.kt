@@ -20,7 +20,9 @@ class FolderRepository(private val context: Context) {
     private val root: File = Environment.getExternalStorageDirectory()
 
     fun hasAllFilesAccess(): Boolean =
-        if (Build.VERSION.SDK_INT >= 30) {
+        if (!br.com.celularsaudavel.BuildConfig.FOLDERS_ENABLED) {
+            false
+        } else if (Build.VERSION.SDK_INT >= 30) {
             Environment.isExternalStorageManager()
         } else {
             context.checkSelfPermission(Manifest.permission.WRITE_EXTERNAL_STORAGE) == PackageManager.PERMISSION_GRANTED
