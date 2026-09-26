@@ -47,6 +47,11 @@ fun CleanScreen(
         verticalArrangement = ListSpacing
     ) {
         item { ScreenHeader("Limpeza", "Proteja antes de liberar espaço.") }
+        val start = state.sessionStartUsed
+        val stNow = state.storage
+        if (start != null && stNow != null) {
+            item { SessionCard(start, stNow, state.sessionFreed, state.avgPhotoBytes) }
+        }
         if (!state.scanned) {
             item {
                 CsCard {
@@ -207,6 +212,24 @@ fun DuplicatesScreen(
             if (groups.isEmpty()) {
                 item { Notice("Nenhuma cópia encontrada. 👏", soft = false) }
             }
+            if (groups.isNotEmpty()) {
+                item {
+                    val allCopies = groups.flatMap { g -> g.copies.map { it.uri } }.toSet()
+                    val all = chosen.size == allCopies.size && allCopies.all { it in selected }
+                    Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
+                        Row(Modifier.horizontalScroll(rememberScrollState()), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                            Pill(if (all) "Desmarcar tudo" else "Selecionar tudo (fica 1 por grupo)", all) {
+                                selected = if (all) emptySet() else allCopies
+                                hint = null
+                            }
+                        }
+                        Text(
+                            if (chosen.isEmpty()) "Toque nas fotos para escolher uma por uma." else "${formatCount(chosen.size)} selecionadas · ${formatBytes(chosenBytes)}",
+                            color = CS.Muted, fontSize = 13.sp
+                        )
+                    }
+                }
+            }
             hint?.let { item { Notice(it) } }
             items(groups, key = { it.original.uri.toString() }) { g ->
                 CsCard {
@@ -320,7 +343,8 @@ fun LargeVideosScreen(
     subtitle: String = "Acima de 100 MB, do maior para o menor.",
     noun: String = "vídeos",
 ) {
-    var selected by remember(videos) { mutableStateOf(emptySet<Uri>()) }
+    var selected by remember(videos) { mutableStateOf(emptySet<String>()) }
+    var mode by remember { mutableStateOf(SelMode.ONE) }
     var confirm by remember { mutableStateOf(false) }
     var pending by remember { mutableStateOf<List<MediaFile>>(emptyList()) }
 
@@ -329,7 +353,7 @@ fun LargeVideosScreen(
         pending = emptyList()
     }
 
-    val chosen = videos.filter { it.uri in selected }
+    val chosen = videos.filter { it.uri.toString() in selected }
     val chosenBytes = chosen.sumOf { it.sizeBytes }
 
     Column(Modifier.fillMaxSize()) {
@@ -344,26 +368,38 @@ fun LargeVideosScreen(
             }
             if (videos.isNotEmpty()) {
                 item {
-                    TextButton(onClick = {
-                        selected = if (selected.size == videos.size) emptySet() else videos.map { it.uri }.toSet()
-                    }) { Text(if (selected.size == videos.size) "Desmarcar todos" else "Marcar todos (${videos.size})", color = CS.Ink) }
+                    SelectionBar(
+                        mode = mode, onMode = { mode = it },
+                        allSelected = chosen.size == videos.size,
+                        onToggleAll = {
+                            selected = if (chosen.size == videos.size) emptySet() else videos.map { it.uri.toString() }.toSet()
+                        },
+                        selectedCount = chosen.size, selectedBytes = chosenBytes
+                    )
                 }
             }
             if (videos.isEmpty()) item { Notice("Nada encontrado aqui. 👏", soft = false) }
-            items(videos, key = { it.uri.toString() }) { v ->
-                val isSel = v.uri in selected
-                CsCard(onClick = { selected = if (isSel) selected - v.uri else selected + v.uri }) {
+            selectableItems(
+                items = videos, mode = mode,
+                keyOf = { it.uri.toString() },
+                dateMsOf = { if (it.dateTakenMs > 0) it.dateTakenMs else it.dateModifiedSec * 1000 },
+                sizeOf = { it.sizeBytes },
+                selected = selected, onSelectedChange = { selected = it }
+            ) { v ->
+                val k = v.uri.toString()
+                val isSel = k in selected
+                CsCard(onClick = { selected = if (isSel) selected - k else selected + k }) {
                     Row(verticalAlignment = Alignment.CenterVertically) {
                         MediaThumb(v.uri, Modifier.size(64.dp))
                         Spacer(Modifier.width(14.dp))
                         Column(Modifier.weight(1f)) {
                             Text(formatBytes(v.sizeBytes), fontWeight = FontWeight.SemiBold, color = CS.Ink, fontSize = 17.sp)
                             Text(v.name, color = CS.Muted, fontSize = 13.sp, maxLines = 1, overflow = TextOverflow.Ellipsis)
-                            Text(formatDate(v.dateModifiedSec * 1000), color = CS.Muted, fontSize = 12.sp)
+                            Text(formatDate(if (v.dateTakenMs > 0) v.dateTakenMs else v.dateModifiedSec * 1000), color = CS.Muted, fontSize = 12.sp)
                         }
                         Checkbox(
                             checked = isSel,
-                            onCheckedChange = { selected = if (it) selected + v.uri else selected - v.uri },
+                            onCheckedChange = { selected = if (it) selected + k else selected - k },
                             colors = CheckboxDefaults.colors(checkedColor = CS.Ink)
                         )
                     }
@@ -421,7 +457,8 @@ fun TrashScreen(
 ) {
     LaunchedEffect(Unit) { onLoad() }
     val items = state.trash
-    var selected by remember(items) { mutableStateOf(items.map { it.uri }.toSet()) }
+    var selected by remember(items) { mutableStateOf(items.map { it.uri.toString() }.toSet()) }
+    var mode by remember { mutableStateOf(SelMode.ONE) }
     var confirm by remember { mutableStateOf(false) }
     var pending by remember { mutableStateOf<List<MediaFile>>(emptyList()) }
     var restoring by remember { mutableStateOf(false) }
@@ -434,7 +471,7 @@ fun TrashScreen(
         restoring = false
     }
 
-    val chosen = items.filter { it.uri in selected }
+    val chosen = items.filter { it.uri.toString() in selected }
     val chosenBytes = chosen.sumOf { it.sizeBytes }
     val nowSec = System.currentTimeMillis() / 1000
 
@@ -457,20 +494,32 @@ fun TrashScreen(
                 item { Notice("A lixeira está vazia. 👏", soft = false) }
             } else {
                 item {
-                    Row(verticalAlignment = Alignment.CenterVertically) {
-                        Text(
-                            "${formatCount(items.size)} itens · ${formatBytes(items.sumOf { it.sizeBytes })}",
-                            color = CS.Ink, fontWeight = FontWeight.SemiBold, modifier = Modifier.weight(1f)
-                        )
-                        TextButton(onClick = {
-                            selected = if (selected.size == items.size) emptySet() else items.map { it.uri }.toSet()
-                        }) { Text(if (selected.size == items.size) "Desmarcar todos" else "Marcar todos", color = CS.Ink) }
-                    }
+                    Text(
+                        "${formatCount(items.size)} itens · ${formatBytes(items.sumOf { it.sizeBytes })} na lixeira",
+                        color = CS.Ink, fontWeight = FontWeight.SemiBold
+                    )
+                }
+                item {
+                    SelectionBar(
+                        mode = mode, onMode = { mode = it },
+                        allSelected = chosen.size == items.size,
+                        onToggleAll = {
+                            selected = if (chosen.size == items.size) emptySet() else items.map { it.uri.toString() }.toSet()
+                        },
+                        selectedCount = chosen.size, selectedBytes = chosenBytes
+                    )
                 }
             }
-            items(items, key = { it.uri.toString() }) { f ->
-                val isSel = f.uri in selected
-                CsCard(onClick = { selected = if (isSel) selected - f.uri else selected + f.uri }) {
+            selectableItems(
+                items = items, mode = mode,
+                keyOf = { it.uri.toString() },
+                dateMsOf = { if (it.dateTakenMs > 0) it.dateTakenMs else it.dateModifiedSec * 1000 },
+                sizeOf = { it.sizeBytes },
+                selected = selected, onSelectedChange = { selected = it }
+            ) { f ->
+                val k = f.uri.toString()
+                val isSel = k in selected
+                CsCard(onClick = { selected = if (isSel) selected - k else selected + k }) {
                     Row(verticalAlignment = Alignment.CenterVertically) {
                         MediaThumb(f.uri, Modifier.size(56.dp))
                         Spacer(Modifier.width(14.dp))
@@ -487,7 +536,7 @@ fun TrashScreen(
                         }
                         Checkbox(
                             checked = isSel,
-                            onCheckedChange = { selected = if (it) selected + f.uri else selected - f.uri },
+                            onCheckedChange = { selected = if (it) selected + k else selected - k },
                             colors = CheckboxDefaults.colors(checkedColor = CS.Ink)
                         )
                     }

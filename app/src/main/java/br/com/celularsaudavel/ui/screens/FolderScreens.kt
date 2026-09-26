@@ -109,6 +109,7 @@ fun FolderCategoryScreen(
         mutableStateOf(if (cat?.safe == true) files.map { it.path }.toSet() else emptySet())
     }
     var confirm by remember { mutableStateOf(false) }
+    var mode by remember { mutableStateOf(SelMode.ONE) }
     val chosen = files.filter { it.path in selected }
     val chosenBytes = chosen.sumOf { it.sizeBytes }
 
@@ -126,18 +127,29 @@ fun FolderCategoryScreen(
                 item { Notice("Nada aqui. 👏", soft = false) }
             } else {
                 item {
-                    Row(verticalAlignment = Alignment.CenterVertically) {
-                        Text(
-                            "${formatCount(files.size)} arquivos · ${formatBytes(files.sumOf { it.sizeBytes })}",
-                            color = CS.Ink, fontWeight = FontWeight.SemiBold, modifier = Modifier.weight(1f)
-                        )
-                        TextButton(onClick = {
-                            selected = if (selected.size == files.size) emptySet() else files.map { it.path }.toSet()
-                        }) { Text(if (selected.size == files.size) "Desmarcar todos" else "Marcar todos", color = CS.Ink) }
-                    }
+                    Text(
+                        "${formatCount(files.size)} arquivos · ${formatBytes(files.sumOf { it.sizeBytes })}",
+                        color = CS.Ink, fontWeight = FontWeight.SemiBold
+                    )
+                }
+                item {
+                    SelectionBar(
+                        mode = mode, onMode = { mode = it },
+                        allSelected = chosen.size == files.size,
+                        onToggleAll = {
+                            selected = if (chosen.size == files.size) emptySet() else files.map { it.path }.toSet()
+                        },
+                        selectedCount = chosen.size, selectedBytes = chosenBytes
+                    )
                 }
             }
-            items(files.take(1500), key = { it.path }) { f ->
+            selectableItems(
+                items = files.take(1500), mode = mode,
+                keyOf = { it.path },
+                dateMsOf = { it.modifiedMs },
+                sizeOf = { it.sizeBytes },
+                selected = selected, onSelectedChange = { selected = it }
+            ) { f ->
                 val isSel = f.path in selected
                 CsCard(onClick = { selected = if (isSel) selected - f.path else selected + f.path }) {
                     Row(verticalAlignment = Alignment.CenterVertically) {
@@ -158,7 +170,7 @@ fun FolderCategoryScreen(
                 }
             }
             if (files.size > 1500) {
-                item { Text("Mostrando os 1.500 maiores. \"Marcar todos\" inclui todos os ${formatCount(files.size)}.", color = CS.Muted, fontSize = 12.sp) }
+                item { Text("Mostrando os 1.500 maiores. \"Selecionar tudo\" inclui todos os ${formatCount(files.size)}.", color = CS.Muted, fontSize = 12.sp) }
             }
         }
         if (files.isNotEmpty()) {

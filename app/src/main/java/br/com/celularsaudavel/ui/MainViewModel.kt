@@ -73,6 +73,9 @@ data class MonitorUi(
     val canNotify: Boolean = false,
 )
 
+/** Resultado de uma limpeza, mostrado como comemoração. */
+data class Win(val bytes: Long, val count: Int, val what: String, val toTrash: Boolean = false)
+
 data class UiState(
     val storage: StorageInfo? = null,
     val mediaAccess: MediaAccess = MediaAccess.NONE,
@@ -101,6 +104,13 @@ data class UiState(
     val drive: DriveUi = DriveUi(),
     val monitor: MonitorUi = MonitorUi(),
     val billing: BillingUi = BillingUi(),
+    /** Espaço usado quando o app foi aberto: base do "antes x depois" da sessão. */
+    val sessionStartUsed: Long? = null,
+    val sessionFreed: Long = 0,
+    val win: Win? = null,
+    /** Progresso de uma exclusão em lote (feitos, total). */
+    val deleting: Pair<Int, Int>? = null,
+    val avgPhotoBytes: Long = 0,
     val history: List<HistoryEntry> = emptyList(),
 ) {
     /** Versão completa (APK direto) libera tudo; na Play depende da assinatura. */
@@ -193,7 +203,8 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
             _state.update {
                 it.copy(
                     storage = storage, mediaAccess = access, usageAccess = usage, folderAccess = folders, history = history,
-                    monitor = monitorUi()
+                    monitor = monitorUi(),
+                    sessionStartUsed = it.sessionStartUsed ?: storage.usedBytes
                 )
             }
             if (usage != before.usageAccess && before.appsLoaded) loadApps()
@@ -242,6 +253,7 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
                     usageAccess = usage,
                     folderAccess = folderAccess,
                     media = summary,
+                    avgPhotoBytes = if (images.isNotEmpty()) images.sumOf { f -> f.sizeBytes } / images.size else 0L,
                     largeVideos = large,
                     duplicates = dups,
                     sequences = seqs,
@@ -281,7 +293,12 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
 
     fun deleteFolderFiles(files: List<LocalFile>) {
         viewModelScope.launch(Dispatchers.IO) {
-            val deleted = folderRepo.delete(files)
+            _state.update { it.copy(deleting = 0 to files.size) }
+            val deleted = folderRepo.delete(files) { done ->
+                _state.update { it.copy(deleting = done to files.size) }
+            }
+            _state.update { it.copy(deleting = null) }
+            celebrate(deleted.sumOf { it.sizeBytes }, deleted.size, "arquivos de pastas")
             if (deleted.isNotEmpty()) {
                 val history = historyStore.add(
                     HistoryEntry(System.currentTimeMillis(), HistoryType.FILES_DELETED, deleted.size, deleted.sumOf { it.sizeBytes })
@@ -297,6 +314,18 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
             }
         }
     }
+
+    private fun celebrate(bytes: Long, count: Int, what: String, toTrash: Boolean = false) {
+        if (count <= 0) return
+        _state.update {
+            it.copy(
+                win = Win(bytes, count, what, toTrash),
+                sessionFreed = it.sessionFreed + if (toTrash) 0 else bytes
+            )
+        }
+    }
+
+    fun dismissWin() = _state.update { it.copy(win = null) }
 
     fun loadTrash() {
         viewModelScope.launch(Dispatchers.IO) {
@@ -336,7 +365,20 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
         }
         images = images.filterNot { it.uri in uris }
         videos = videos.filterNot { it.uri in uris }
-        if (type == HistoryType.VIDEOS_TRASHED || type == HistoryType.SEQUENCE_TRASHED || type == HistoryType.SCREENSHOTS_TRASHED) loadTrash()
+        val toTrash = type == HistoryType.VIDEOS_TRASHED || type == HistoryType.SEQUENCE_TRASHED || type == HistoryType.SCREENSHOTS_TRASHED
+        celebrate(
+            bytes, removed.size,
+            when (type) {
+                HistoryType.DUPLICATES_REMOVED -> "cópias duplicadas"
+                HistoryType.TRASH_DELETED -> "itens da lixeira"
+                HistoryType.VIDEOS_TRASHED -> "vídeos"
+                HistoryType.SEQUENCE_TRASHED -> "fotos em sequência"
+                HistoryType.SCREENSHOTS_TRASHED -> "capturas de tela"
+                else -> "arquivos"
+            },
+            toTrash
+        )
+        if (toTrash) loadTrash()
     }
 
     fun onUninstallFinished(app: InstalledApp) {
@@ -355,6 +397,7 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
                         storage = media.storageInfo()
                     )
                 }
+                celebrate(app.sizeBytes, 1, "app (${app.name})")
             }
         }
     }
@@ -487,6 +530,7 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
             images = images.filterNot { it.uri.toString() in gone }
             videos = videos.filterNot { it.uri.toString() in gone }
             _state.update { it.copy(history = history, storage = media.storageInfo()) }
+            celebrate(rows.sumOf { it.size }, rows.size, "fotos e vídeos com backup verificado")
             refreshBackupSummary()
         }
     }

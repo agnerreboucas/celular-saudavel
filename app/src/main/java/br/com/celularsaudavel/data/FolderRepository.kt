@@ -153,13 +153,17 @@ class FolderRepository(private val context: Context) {
     }
 
     /** Apaga de verdade. Chamado só depois da confirmação do usuário. */
-    fun delete(files: List<LocalFile>): List<LocalFile> {
+    fun delete(files: List<LocalFile>, onProgress: (Int) -> Unit = {}): List<LocalFile> {
+        var done = 0
         val deleted = files.filter { lf ->
-            try {
+            val ok = try {
                 File(lf.path).delete()
             } catch (_: Exception) {
                 false
             }
+            done++
+            if (done % 20 == 0 || done == files.size) onProgress(done)
+            ok
         }
         if (deleted.isNotEmpty()) {
             try {

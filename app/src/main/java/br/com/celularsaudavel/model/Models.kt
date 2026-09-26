@@ -90,7 +90,14 @@ data class HistoryEntry(
     val detail: String = ""
 )
 
-data class HealthScore(val value: Int, val label: String, val headline: String)
+data class HealthScore(
+    val value: Int,
+    val label: String,
+    val headline: String,
+    /** Comparação com uma pessoa, para explicar o estado de forma simples. */
+    val face: String = "",
+    val likePerson: String = "",
+)
 
 const val DAY_MS = 24L * 60 * 60 * 1000
 const val UNUSED_DAYS = 90
@@ -128,9 +135,22 @@ fun computeHealth(
     }.roundToInt().coerceIn(0, 100)
 
     return when {
-        value >= 80 -> HealthScore(value, "Bom", "Seu celular está saudável.")
-        value >= 60 -> HealthScore(value, "Pode melhorar", "Seu celular pede alguns cuidados.")
-        else -> HealthScore(value, "Precisa de cuidado", "Vamos organizar seu celular com calma.")
+        value >= 80 -> HealthScore(
+            value, "Saudável", "Seu celular está saudável. Pode ficar tranquilo.",
+            "😊", "Como uma pessoa descansada: tem fôlego para o dia, guarda o que precisa e ainda sobra energia."
+        )
+        value >= 60 -> HealthScore(
+            value, "Atenção", "Seu celular pede alguns cuidados.",
+            "😐", "Como uma pessoa cansada: dá conta da rotina, mas já sem folga para imprevistos."
+        )
+        value >= 40 -> HealthScore(
+            value, "Precisa de cuidado", "Vale organizar o celular nos próximos dias.",
+            "😓", "Como uma pessoa sobrecarregada: carrega coisa demais e cada tarefa nova pesa mais."
+        )
+        else -> HealthScore(
+            value, "Urgente", "O espaço está no limite. Vamos liberar com segurança agora.",
+            "🥵", "Como uma pessoa exausta: precisa parar e aliviar a carga agora, antes que algo importante falhe."
+        )
     }
 }
 

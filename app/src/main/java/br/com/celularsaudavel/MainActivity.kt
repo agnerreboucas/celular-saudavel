@@ -50,6 +50,8 @@ import br.com.celularsaudavel.ui.screens.SORT_SIZE
 import br.com.celularsaudavel.ui.screens.SORT_UNUSED
 import br.com.celularsaudavel.ui.CS
 import br.com.celularsaudavel.ui.CelularSaudavelTheme
+import br.com.celularsaudavel.ui.DeletingDialog
+import br.com.celularsaudavel.ui.WinDialog
 import br.com.celularsaudavel.ui.MainViewModel
 import br.com.celularsaudavel.ui.screens.AppsScreen
 import br.com.celularsaudavel.ui.screens.BackupScreen
@@ -274,6 +276,20 @@ fun AppRoot(vm: MainViewModel = viewModel()) {
         } catch (_: Exception) {
             ""
         }
+    }
+
+    state.deleting?.let { (done, total) -> DeletingDialog(done, total) }
+    state.win?.let { w ->
+        WinDialog(
+            bytes = w.bytes, count = w.count, what = w.what, toTrash = w.toTrash,
+            sessionSaved = maxOf(
+                (state.sessionStartUsed ?: 0L) - (state.storage?.usedBytes ?: 0L),
+                state.sessionFreed
+            ),
+            avgPhotoBytes = state.avgPhotoBytes,
+            onOpenTrash = { go(TAB_CLEAN, "trash") },
+            onDismiss = vm::dismissWin
+        )
     }
 
     Scaffold(
