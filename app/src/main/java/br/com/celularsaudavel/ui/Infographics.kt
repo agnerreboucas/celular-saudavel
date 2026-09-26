@@ -189,7 +189,11 @@ private fun Capacity(emoji: String, value: String, label: String, modifier: Modi
             .background(CS.Surface2)
             .padding(12.dp)
     ) {
-        Text("$emoji $value", fontWeight = FontWeight.Bold, color = CS.Ink, fontSize = 16.sp)
+        Row(verticalAlignment = Alignment.CenterVertically) {
+            BareIcon(emoji, CS.Green, 18.dp)
+            Spacer(Modifier.width(6.dp))
+            Text(value, fontWeight = FontWeight.Bold, color = CS.Ink, fontSize = 16.sp)
+        }
         Text(label, color = CS.Muted, fontSize = 12.sp)
     }
 }
@@ -274,7 +278,7 @@ fun WinDialog(
 ) {
     AlertDialog(
         onDismissRequest = onDismiss,
-        icon = { Text(if (toTrash) "🗑️" else "🎉", fontSize = 36.sp) },
+        icon = { AppIcon(if (toTrash) "🗑️" else "✅", size = 56.dp, corner = 16.dp) },
         title = {
             Text(
                 if (toTrash) "Foi para a lixeira" else "Parabéns! Você economizou ${formatBytes(bytes)}",
@@ -315,8 +319,8 @@ fun VitalsCard(vitals: List<Vital>, onClick: (() -> Unit)? = null) {
             Text("Sinais vitais", fontWeight = FontWeight.Bold, color = CS.Ink, fontSize = 16.sp)
             vitals.forEach { v ->
                 Row(verticalAlignment = Alignment.CenterVertically) {
-                    Text(v.emoji, fontSize = 20.sp)
-                    Spacer(Modifier.width(10.dp))
+                    AppIcon(v.emoji, size = 36.dp, tint = v.color, background = v.color.copy(alpha = 0.12f), corner = 10.dp)
+                    Spacer(Modifier.width(12.dp))
                     Column(Modifier.weight(1f)) {
                         Text(v.name, color = CS.Ink, fontSize = 15.sp, fontWeight = FontWeight.SemiBold)
                         Text(v.value, color = CS.Muted, fontSize = 13.sp)

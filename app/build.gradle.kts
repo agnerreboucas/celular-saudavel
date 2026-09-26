@@ -14,8 +14,8 @@ android {
         applicationId = "br.com.celularsaudavel"
         minSdk = 26
         targetSdk = 36
-        versionCode = 11
-        versionName = "1.5.0"
+        versionCode = 12
+        versionName = "1.6.0"
     }
 
     // Chave de TESTE fixa: permite atualizar o app instalado sem desinstalar.
@@ -61,7 +61,10 @@ android {
             signingConfig = signingConfigs.getByName("dev")
         }
         getByName("release") {
-            isMinifyEnabled = false
+            // Encolhe o app: remove o código e os ícones que não são usados.
+            isMinifyEnabled = true
+            isShrinkResources = true
+            proguardFiles(getDefaultProguardFile("proguard-android-optimize.txt"), "proguard-rules.pro")
             signingConfig = signingConfigs.findByName("upload") ?: signingConfigs.getByName("dev")
         }
     }
@@ -97,6 +100,7 @@ dependencies {
     implementation("com.android.billingclient:billing-ktx:7.1.1")
 
     implementation("androidx.compose.material3:material3")
+    implementation("androidx.compose.material:material-icons-extended")
     implementation("androidx.compose.foundation:foundation")
     implementation("androidx.compose.ui:ui")
     implementation("androidx.compose.ui:ui-tooling-preview")

@@ -85,6 +85,7 @@ class BackupWorker(ctx: Context, params: WorkerParameters) : CoroutineWorker(ctx
 
         try {
             drive.refreshToken()
+            val account = runCatching { drive.account().email }.getOrNull()?.ifBlank { null } ?: drive.email
             val root = drive.folderId(DriveRepository.ROOT_FOLDER, null)
             val photos = drive.folderId("Fotos", root)
             val videos = drive.folderId("Vídeos", root)
@@ -99,14 +100,19 @@ class BackupWorker(ctx: Context, params: WorkerParameters) : CoroutineWorker(ctx
                         val parent = if (row.category == "video") videos else photos
                         val r = drive.upload(Uri.parse(row.uri), row.name, row.mime, parent)
                         if (r.verified) {
-                            db.mark(row.uri, BackupState.VERIFIED, driveId = r.driveId, md5 = r.localMd5)
+                            db.mark(row.uri, BackupState.VERIFIED, driveId = r.driveId, md5 = r.localMd5, account = account)
                             MonitorPrefs(applicationContext).lastBackupAt = System.currentTimeMillis()
                         } else {
                             db.mark(row.uri, BackupState.FAILED, driveId = r.driveId, error = "Conferência não bateu")
                         }
                     } catch (e: DriveFullException) {
                         db.mark(row.uri, BackupState.QUEUED, error = "Drive cheio")
-                        return Result.failure(workDataOf(KEY_ERROR to "O Google Drive ficou sem espaço."))
+                        return Result.failure(
+                            workDataOf(
+                                KEY_ERROR to "O Google Drive${account?.let { " de $it" } ?: ""} ficou sem espaço. " +
+                                    "Toque em \"Trocar conta\" e escolha outro e-mail para continuar o backup de onde parou."
+                            )
+                        )
                     } catch (e: NeedsConsentException) {
                         db.mark(row.uri, BackupState.QUEUED)
                         return Result.failure(workDataOf(KEY_ERROR to "Reconecte o Google Drive."))

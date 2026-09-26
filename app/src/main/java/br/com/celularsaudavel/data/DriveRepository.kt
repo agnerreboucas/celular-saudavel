@@ -1,5 +1,6 @@
 package br.com.celularsaudavel.data
 
+import android.accounts.Account
 import android.content.Context
 import android.net.Uri
 import com.google.android.gms.auth.api.identity.AuthorizationRequest
@@ -30,7 +31,7 @@ data class UploadResult(val driveId: String, val remoteMd5: String?, val remoteS
  * Google Drive via REST, escopo mínimo drive.file (o app só enxerga o que ele mesmo criou).
  * O app é reconhecido pelo Google pelo nome do pacote + SHA-1 cadastrados no Google Cloud.
  */
-class DriveRepository(private val context: Context) {
+class DriveRepository(private val context: Context, private val fixedEmail: String? = null) {
 
     companion object {
         const val SCOPE = "https://www.googleapis.com/auth/drive.file"
@@ -39,8 +40,12 @@ class DriveRepository(private val context: Context) {
         private const val FOLDER_MIME = "application/vnd.google-apps.folder"
         const val ROOT_FOLDER = "Celular Saudável"
 
-        fun authRequest(): AuthorizationRequest =
-            AuthorizationRequest.builder().setRequestedScopes(listOf(Scope(SCOPE))).build()
+        /** Pede acesso ao Drive; com e-mail, o Google usa exatamente essa conta. */
+        fun authRequest(email: String? = null): AuthorizationRequest {
+            val b = AuthorizationRequest.builder().setRequestedScopes(listOf(Scope(SCOPE)))
+            if (!email.isNullOrBlank()) b.setAccount(Account(email, "com.google"))
+            return b.build()
+        }
     }
 
     private val prefs = context.getSharedPreferences("drive", Context.MODE_PRIVATE)
@@ -53,6 +58,30 @@ class DriveRepository(private val context: Context) {
 
     private var token: String? = null
 
+    /** Conta do Google usada no backup (escolhida pela pessoa). */
+    val email: String?
+        get() = fixedEmail ?: prefs.getString("email", null)
+
+    /** Contas que já receberam backup neste celular. */
+    val knownAccounts: Set<String>
+        get() = prefs.getStringSet("accounts", emptySet()) ?: emptySet()
+
+    /** Troca a conta do backup. O que falta enviar continua na conta nova. */
+    fun selectAccount(newEmail: String) {
+        token = null
+        prefs.edit().putString("email", newEmail).apply()
+    }
+
+    private fun remember(accountEmail: String) {
+        if (accountEmail.isBlank() || fixedEmail != null) return
+        val set = knownAccounts + accountEmail
+        prefs.edit().putString("email", accountEmail).putStringSet("accounts", set).apply()
+    }
+
+    /** Um acesso ao Drive de outra conta (para recuperar ou apagar o que foi guardado lá). */
+    fun forAccount(other: String?): DriveRepository =
+        if (other.isNullOrBlank() || other.equals(email, ignoreCase = true)) this else DriveRepository(context, other)
+
     fun setToken(t: String?) {
         token = t
         if (t != null) connected = true
@@ -60,7 +89,7 @@ class DriveRepository(private val context: Context) {
 
     /** Pega um token sem mostrar tela (funciona depois da primeira autorização). Rodar fora da thread principal. */
     fun refreshToken(): String {
-        val result = Tasks.await(Identity.getAuthorizationClient(context).authorize(authRequest()))
+        val result = Tasks.await(Identity.getAuthorizationClient(context).authorize(authRequest(email)))
         if (result.hasResolution()) throw NeedsConsentException()
         val t = result.accessToken ?: throw NeedsConsentException()
         token = t
@@ -110,11 +139,11 @@ class DriveRepository(private val context: Context) {
             name = user?.optString("displayName") ?: "",
             limitBytes = q?.optString("limit")?.toLongOrNull(),
             usageBytes = q?.optString("usage")?.toLongOrNull() ?: 0L
-        )
+        ).also { remember(it.email) }
     }
 
     fun folderId(name: String, parentId: String?): String = withRetry {
-        val key = "folder:${parentId ?: "root"}:$name"
+        val key = "folder:${email ?: "?"}:${parentId ?: "root"}:$name"
         prefs.getString(key, null)?.let { return@withRetry it }
         val safe = name.replace("'", "\\'")
         var q = "name='$safe' and mimeType='$FOLDER_MIME' and trashed=false"
@@ -204,8 +233,10 @@ class DriveRepository(private val context: Context) {
         Unit
     }
 
+    /** Desconecta a conta atual, mas lembra das contas usadas (para o histórico). */
     fun disconnect() {
         token = null
-        prefs.edit().clear().apply()
+        val known = knownAccounts
+        prefs.edit().clear().putStringSet("accounts", known).apply()
     }
 }

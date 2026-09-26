@@ -28,6 +28,8 @@ fun BackupScreen(
     onFree: () -> Unit,
     onRefresh: () -> Unit,
     onOpenPremium: () -> Unit,
+    onSwitchAccount: () -> Unit = {},
+    onOpenHistory: () -> Unit = {},
 ) {
     val d = state.drive
     var sel by rememberSaveable { mutableStateOf(setOf(BackupCat.CAMERA)) }
@@ -72,9 +74,19 @@ fun BackupScreen(
                             Spacer(Modifier.height(14.dp))
                             PrimaryButton(if (d.connecting) "Conectando…" else "Conectar Google Drive", onConnect, enabled = !d.connecting)
                         }
-                        acc == null -> Text("Conectado. Carregando sua conta…", color = CS.Muted)
+                        acc == null -> {
+                            Text(d.email?.let { "Conectado a $it. Carregando…" } ?: "Conectado. Carregando sua conta…", color = CS.Muted)
+                            TextButton(onClick = onSwitchAccount) { Text("Trocar conta", color = CS.Green) }
+                        }
                         else -> {
-                            Text(acc.email, color = CS.Ink, fontSize = 15.sp)
+                            Row(verticalAlignment = Alignment.CenterVertically) {
+                                AppIcon("📧", size = 36.dp, corner = 10.dp)
+                                Spacer(Modifier.width(10.dp))
+                                Column(Modifier.weight(1f)) {
+                                    Text("Conta do backup", color = CS.Muted, fontSize = 12.sp)
+                                    Text(acc.email, color = CS.Ink, fontSize = 15.sp, fontWeight = FontWeight.SemiBold)
+                                }
+                            }
                             Spacer(Modifier.height(8.dp))
                             val limit = acc.limitBytes
                             if (limit != null && limit > 0) {
@@ -91,14 +103,49 @@ fun BackupScreen(
                             } else {
                                 Text("${formatBytes(acc.usageBytes)} usados · espaço ilimitado", color = CS.Muted, fontSize = 13.sp)
                             }
-                            TextButton(onClick = { confirmDisconnect = true }) { Text("Desconectar", color = CS.Muted) }
+                            val nearlyFull = limit != null && limit > 0 && (acc.freeBytes ?: 0) < limit / 20
+                            if (nearlyFull) {
+                                Spacer(Modifier.height(10.dp))
+                                Text(
+                                    "Este Drive está quase cheio. Você pode continuar o backup em outro e-mail: o que já foi salvo fica onde está.",
+                                    color = CS.Amber, fontSize = 13.sp, lineHeight = 18.sp
+                                )
+                            }
+                            Row {
+                                TextButton(onClick = onSwitchAccount) {
+                                    BareIcon("🔄", CS.Green, 18.dp)
+                                    Spacer(Modifier.width(6.dp))
+                                    Text(if (nearlyFull) "Usar outro e-mail" else "Trocar conta", color = CS.Green)
+                                }
+                                Spacer(Modifier.weight(1f))
+                                TextButton(onClick = { confirmDisconnect = true }) { Text("Desconectar", color = CS.Muted) }
+                            }
                         }
                     }
                     d.error?.let {
                         Spacer(Modifier.height(10.dp))
                         Text(it, color = CS.Amber, fontSize = 13.sp, lineHeight = 18.sp)
+                        if (d.connected && it.contains("espaço")) {
+                            Spacer(Modifier.height(8.dp))
+                            OutlinedButton(onClick = onSwitchAccount, shape = RoundedCornerShape(14.dp)) {
+                                Text("Escolher outro e-mail", color = CS.Ink)
+                            }
+                        }
                     }
                 }
+            }
+        }
+
+        // ---------- Histórico ----------
+        if (d.accounts.isNotEmpty() || state.recycle.isNotEmpty()) {
+            item {
+                val saved = d.accounts.sumOf { it.count }
+                RowCard(
+                    "📊", "Histórico de backups",
+                    if (saved > 0) "${formatCount(saved)} arquivos protegidos em ${d.accounts.size} conta${if (d.accounts.size == 1) "" else "s"}"
+                    else "Veja o que foi salvo, apagado e o que ainda dá para recuperar",
+                    onOpenHistory
+                )
             }
         }
 

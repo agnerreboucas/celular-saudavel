@@ -121,13 +121,7 @@ fun CsCard(
 fun RowCard(emoji: String, title: String, subtitle: String, onClick: (() -> Unit)? = null) {
     CsCard(onClick = onClick) {
         Row(verticalAlignment = Alignment.CenterVertically) {
-            Box(
-                Modifier
-                    .size(44.dp)
-                    .clip(CircleShape)
-                    .background(CS.Surface2),
-                contentAlignment = Alignment.Center
-            ) { Text(emoji, fontSize = 20.sp) }
+            AppIcon(emoji)
             Spacer(Modifier.width(14.dp))
             Column(Modifier.weight(1f)) {
                 Text(title, fontWeight = FontWeight.SemiBold, color = CS.Ink, fontSize = 16.sp)
@@ -240,7 +234,7 @@ fun MediaThumb(uri: Uri, modifier: Modifier = Modifier) {
         if (b != null) {
             Image(b, contentDescription = null, contentScale = ContentScale.Crop, modifier = Modifier.fillMaxSize())
         } else {
-            Text("🖼️", fontSize = 18.sp)
+            BareIcon("🖼️", CS.Muted)
         }
     }
 }

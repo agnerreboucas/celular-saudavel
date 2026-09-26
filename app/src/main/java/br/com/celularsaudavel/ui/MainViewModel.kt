@@ -67,6 +67,12 @@ data class DriveUi(
     val summary: BackupSummary = BackupSummary(),
     /** O que ainda não tem backup, por grupo */
     val toProtect: Map<String, CategoryStat> = emptyMap(),
+    /** Conta escolhida para o backup */
+    val email: String? = null,
+    /** Quanto foi protegido em cada conta */
+    val accounts: List<br.com.celularsaudavel.data.AccountBackup> = emptyList(),
+    /** Últimos arquivos protegidos */
+    val recent: List<BackupRow> = emptyList(),
 )
 
 data class MonitorUi(
@@ -197,7 +203,7 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
         if (monitorPrefs.enabled) HealthMonitorWorker.schedule(app)
         runCatching { DailyBulletin.schedule(app) }
         refreshBasics()
-        _state.update { it.copy(drive = it.drive.copy(connected = drive.connected)) }
+        _state.update { it.copy(drive = it.drive.copy(connected = drive.connected, email = drive.email)) }
         viewModelScope.launch {
             WorkManager.getInstance(app).getWorkInfosForUniqueWorkFlow(BackupWorker.NAME).collect { infos ->
                 val info = infos.firstOrNull()
@@ -414,7 +420,13 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
             if (cloud) runCatching { drive.refreshToken() }
             val done = recycleBin.deleteForever(items, if (cloud) drive else null)
             val phoneBytes = done.filter { it.place == br.com.celularsaudavel.data.BinPlace.PHONE }.sumOf { it.size }
-            _state.update { it.copy(recycle = recycleBin.list(), storage = media.storageInfo()) }
+            val history = if (done.isNotEmpty()) historyStore.add(
+                HistoryEntry(
+                    System.currentTimeMillis(), HistoryType.TRASH_DELETED, done.size, done.sumOf { it.size },
+                    "${done.size} arquivo${if (done.size == 1) "" else "s"} da lixeira do app"
+                )
+            ) else historyStore.load()
+            _state.update { it.copy(recycle = recycleBin.list(), storage = media.storageInfo(), history = history) }
             if (phoneBytes > 0) celebrate(phoneBytes, done.size, "arquivos apagados de vez")
         }
     }
@@ -553,6 +565,29 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
 
     // ---------------- Google Drive ----------------
 
+    /** E-mail da conta escolhida (usado ao pedir autorização ao Google). */
+    fun driveEmail(): String? = drive.email
+
+    /** A pessoa escolheu outra conta do Google: o backup continua de onde parou, nessa conta. */
+    fun selectDriveAccount(email: String) {
+        drive.selectAccount(email)
+        _state.update { it.copy(drive = it.drive.copy(email = email, account = null, error = null)) }
+    }
+
+    fun loadBackupHistory() {
+        viewModelScope.launch(Dispatchers.IO) {
+            val accounts = backupDb.byAccount()
+            val recent = backupDb.recentProtected(80)
+            _state.update {
+                it.copy(
+                    drive = it.drive.copy(accounts = accounts, recent = recent),
+                    recycle = recycleBin.list(), retentionDays = recycleBin.retentionDays,
+                    history = historyStore.load()
+                )
+            }
+        }
+    }
+
     fun onDriveConnecting() {
         _state.update { it.copy(drive = it.drive.copy(connecting = true, error = null)) }
     }
@@ -571,7 +606,7 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
         viewModelScope.launch(Dispatchers.IO) {
             try {
                 val acc = drive.account()
-                _state.update { it.copy(drive = it.drive.copy(account = acc, connected = true, error = null)) }
+                _state.update { it.copy(drive = it.drive.copy(account = acc, email = drive.email, connected = true, error = null)) }
             } catch (e: Exception) {
                 _state.update {
                     it.copy(drive = it.drive.copy(error = "Não consegui falar com o Drive: ${e.message ?: "erro desconhecido"}"))
@@ -604,7 +639,8 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
             }
             val toProtect = notProtected.groupBy { categoryOf(it) }
                 .mapValues { (_, l) -> CategoryStat(l.size, l.sumOf { it.sizeBytes }) }
-            _state.update { it.copy(drive = it.drive.copy(summary = summary, toProtect = toProtect)) }
+            val accounts = backupDb.byAccount()
+            _state.update { it.copy(drive = it.drive.copy(summary = summary, toProtect = toProtect, accounts = accounts)) }
         }
     }
 

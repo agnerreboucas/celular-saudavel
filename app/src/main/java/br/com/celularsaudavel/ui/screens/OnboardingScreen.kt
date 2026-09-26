@@ -3,8 +3,9 @@ package br.com.celularsaudavel.ui.screens
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.pager.HorizontalPager
+import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.foundation.pager.rememberPagerState
-import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.KeyboardActions
 import androidx.compose.foundation.text.KeyboardOptions
@@ -13,7 +14,6 @@ import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
-import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.text.input.KeyboardCapitalization
@@ -23,37 +23,43 @@ import androidx.compose.ui.unit.sp
 import br.com.celularsaudavel.ui.*
 import kotlinx.coroutines.launch
 
-private data class Slide(val emoji: String, val tint: Color, val title: String, val text: String, val points: List<String>)
+private data class Slide(val icon: String, val title: String, val text: String, val points: List<String>)
 
 private val slides = listOf(
     Slide(
-        "🩺", Status.Green,
-        "Cuide do seu celular como cuida da saúde",
-        "O Celular Saudável faz um check-up do aparelho e mostra, em cores, como ele está: saudável, cansado, sobrecarregado ou exausto.",
+        "🌱",
+        "Agora você vai conhecer como o seu celular vai ficar mais saudável",
+        "Em poucos passos, mostramos o que o Celular Saudável faz por você e como tudo funciona com segurança.",
+        emptyList()
+    ),
+    Slide(
+        "🩺",
+        "Seu celular chegou aqui porque ninguém cuidou dele",
+        "Com o tempo, fotos repetidas, vídeos esquecidos e arquivos escondidos vão se acumulando. Agora vamos cuidar da saúde do seu celular, para que ele volte a cumprir bem as suas funções.",
         listOf("Índice de saúde de 0 a 100", "Sinais vitais: espaço, organização, proteção e apps", "Tudo calculado aqui no celular")
     ),
     Slide(
-        "🔍", Status.Yellow,
+        "🔍",
         "Descubra o que ocupa espaço",
         "Encontramos fotos repetidas, sequências, prints, vídeos grandes, apps parados, cache e as pastas escondidas do WhatsApp.",
         listOf("Veja cada arquivo antes de apagar", "Selecione um por um, por dia ou tudo", "Antes e depois de cada limpeza")
     ),
     Slide(
-        "☁️", Color(0xFF3B6FB6),
+        "☁️",
         "Proteja primeiro. Libere depois.",
-        "Suas fotos e vídeos vão para o SEU Google Drive, cada arquivo é conferido, e só então o espaço é liberado.",
-        listOf("Backup verificado arquivo por arquivo", "Liberar só o que está protegido", "Fotos continuam acessíveis na nuvem")
+        "Suas fotos e vídeos vão para o SEU Google Drive, cada arquivo é conferido e só então o espaço é liberado.",
+        listOf("Backup verificado arquivo por arquivo", "Escolha em qual conta do Google guardar", "Histórico de tudo o que foi salvo")
     ),
     Slide(
-        "♻️", Status.Orange,
+        "♻️",
         "Nada some na hora",
         "O que o app apaga fica guardado por até 6 meses. Mudou de ideia? Recupere com um toque.",
         listOf("Lixeira do app e lixeira na nuvem", "Você escolhe: 1, 3 ou 6 meses", "Confirmação clara antes de apagar de vez")
     ),
     Slide(
-        "🔔", Color(0xFF9B6BC4),
+        "🔔",
         "Acompanhamento sem sustos",
-        "Receba o boletim da saúde do celular no dia e hora que preferir, e veja o índice num widget na tela inicial.",
+        "Receba o boletim da saúde do celular no dia e na hora que preferir e veja o índice num widget na tela inicial.",
         listOf("Boletim diário, semanal ou mensal", "Aviso quando o espaço estiver acabando", "Sem alarmes falsos e sem som de madrugada")
     ),
 )
@@ -109,28 +115,27 @@ fun OnboardingScreen(initialName: String, onFinish: (String) -> Unit) {
 @Composable
 private fun SlidePage(s: Slide) {
     Column(
-        Modifier.fillMaxSize().padding(horizontal = 28.dp),
+        Modifier
+            .fillMaxSize()
+            .verticalScroll(rememberScrollState())
+            .padding(horizontal = 28.dp, vertical = 12.dp),
         horizontalAlignment = Alignment.CenterHorizontally,
         verticalArrangement = Arrangement.Center
     ) {
-        Box(
-            Modifier
-                .size(150.dp)
-                .clip(CircleShape)
-                .background(s.tint.copy(alpha = 0.14f)),
-            contentAlignment = Alignment.Center
-        ) { Text(s.emoji, fontSize = 72.sp) }
+        AppIcon(s.icon, size = 120.dp, corner = 32.dp)
         Spacer(Modifier.height(28.dp))
-        Text(s.title, fontSize = 26.sp, fontWeight = FontWeight.Bold, color = CS.Ink, textAlign = TextAlign.Center, lineHeight = 31.sp)
+        Text(s.title, fontSize = 25.sp, fontWeight = FontWeight.Bold, color = CS.Ink, textAlign = TextAlign.Center, lineHeight = 31.sp)
         Spacer(Modifier.height(12.dp))
         Text(s.text, fontSize = 16.sp, color = CS.Muted, textAlign = TextAlign.Center, lineHeight = 23.sp)
-        Spacer(Modifier.height(20.dp))
-        Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
-            s.points.forEach { p ->
-                Row(verticalAlignment = Alignment.CenterVertically) {
-                    Text("✓", color = s.tint, fontWeight = FontWeight.Bold, fontSize = 16.sp)
-                    Spacer(Modifier.width(10.dp))
-                    Text(p, color = CS.Ink, fontSize = 15.sp)
+        if (s.points.isNotEmpty()) {
+            Spacer(Modifier.height(20.dp))
+            Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                s.points.forEach { p ->
+                    Row(verticalAlignment = Alignment.CenterVertically) {
+                        BareIcon("✅", CS.Green, 18.dp)
+                        Spacer(Modifier.width(10.dp))
+                        Text(p, color = CS.Ink, fontSize = 15.sp)
+                    }
                 }
             }
         }
@@ -139,20 +144,17 @@ private fun SlidePage(s: Slide) {
 
 @Composable
 private fun NamePage(name: String, onName: (String) -> Unit, onDone: () -> Unit) {
+    // Alinhado ao topo e com rolagem: com o teclado aberto em telas pequenas nada fica cortado.
     Column(
-        Modifier.fillMaxSize().padding(horizontal = 28.dp),
-        horizontalAlignment = Alignment.CenterHorizontally,
-        verticalArrangement = Arrangement.Center
+        Modifier
+            .fillMaxSize()
+            .verticalScroll(rememberScrollState())
+            .padding(horizontal = 24.dp, vertical = 16.dp),
+        horizontalAlignment = Alignment.CenterHorizontally
     ) {
-        Box(
-            Modifier
-                .size(120.dp)
-                .clip(CircleShape)
-                .background(CS.GreenSoft),
-            contentAlignment = Alignment.Center
-        ) { Text("👋", fontSize = 60.sp) }
-        Spacer(Modifier.height(24.dp))
-        Text("Como podemos te chamar?", fontSize = 26.sp, fontWeight = FontWeight.Bold, color = CS.Ink, textAlign = TextAlign.Center)
+        AppIcon("👋", size = 88.dp, corner = 24.dp)
+        Spacer(Modifier.height(20.dp))
+        Text("Como podemos te chamar?", fontSize = 25.sp, fontWeight = FontWeight.Bold, color = CS.Ink, textAlign = TextAlign.Center)
         Spacer(Modifier.height(8.dp))
         Text(
             "Seu nome fica só neste celular e serve para o app te cumprimentar.",
@@ -162,17 +164,25 @@ private fun NamePage(name: String, onName: (String) -> Unit, onDone: () -> Unit)
         OutlinedTextField(
             value = name,
             onValueChange = { onName(it.take(40)) },
-            label = { Text("Seu nome") },
+            placeholder = { Text("Digite seu nome", fontSize = 20.sp, color = CS.Muted) },
             singleLine = true,
+            textStyle = LocalTextStyle.current.copy(fontSize = 20.sp, color = CS.Ink),
+            shape = RoundedCornerShape(16.dp),
+            colors = OutlinedTextFieldDefaults.colors(
+                focusedBorderColor = CS.Green,
+                cursorColor = CS.Green,
+                focusedContainerColor = CS.Surface,
+                unfocusedContainerColor = CS.Surface,
+            ),
             keyboardOptions = KeyboardOptions(capitalization = KeyboardCapitalization.Words, imeAction = ImeAction.Done),
             keyboardActions = KeyboardActions(onDone = { onDone() }),
-            modifier = Modifier.fillMaxWidth()
+            modifier = Modifier.fillMaxWidth().heightIn(min = 64.dp)
         )
         if (name.isNotBlank()) {
             Spacer(Modifier.height(16.dp))
             Text(
-                "${br.com.celularsaudavel.data.greetingFor(java.util.Calendar.getInstance().get(java.util.Calendar.HOUR_OF_DAY))}, ${name.trim().substringBefore(' ')}! 😊",
-                fontSize = 18.sp, color = CS.Green, fontWeight = FontWeight.SemiBold
+                "${br.com.celularsaudavel.data.greetingFor(java.util.Calendar.getInstance().get(java.util.Calendar.HOUR_OF_DAY))}, ${name.trim().substringBefore(' ')}!",
+                fontSize = 20.sp, color = CS.Green, fontWeight = FontWeight.SemiBold, textAlign = TextAlign.Center
             )
         }
     }

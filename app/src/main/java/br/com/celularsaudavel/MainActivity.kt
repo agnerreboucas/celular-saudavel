@@ -210,7 +210,7 @@ fun AppRoot(vm: MainViewModel = viewModel()) {
     val connectDrive: () -> Unit = {
         vm.onDriveConnecting()
         try {
-            Identity.getAuthorizationClient(context).authorize(DriveRepository.authRequest())
+            Identity.getAuthorizationClient(context).authorize(DriveRepository.authRequest(vm.driveEmail()))
                 .addOnSuccessListener { res ->
                     if (res.hasResolution()) {
                         val pi = res.pendingIntent
@@ -223,6 +223,25 @@ fun AppRoot(vm: MainViewModel = viewModel()) {
                 .addOnFailureListener { e -> vm.onDriveError(driveError(e)) }
         } catch (e: Exception) {
             vm.onDriveError(driveError(e))
+        }
+    }
+    // Escolher outra conta do Google (ex.: o Drive atual lotou). O backup continua de onde parou.
+    val accountLauncher = rememberLauncherForActivityResult(ActivityResultContracts.StartActivityForResult()) { r ->
+        val email = r.data?.getStringExtra(android.accounts.AccountManager.KEY_ACCOUNT_NAME)
+        if (r.resultCode == Activity.RESULT_OK && !email.isNullOrBlank()) {
+            vm.selectDriveAccount(email)
+            connectDrive()
+        }
+    }
+    val switchAccount: () -> Unit = {
+        try {
+            accountLauncher.launch(
+                android.accounts.AccountManager.newChooseAccountIntent(
+                    null, null, arrayOf("com.google"), "Escolha a conta do Google que vai receber o backup", null, null, null
+                )
+            )
+        } catch (e: Exception) {
+            vm.onDriveError("Não consegui abrir a escolha de contas: ${e.message ?: "erro"}")
         }
     }
     var pendingStart by remember { mutableStateOf<Pair<Set<String>, Boolean>?>(null) }
@@ -358,9 +377,13 @@ fun AppRoot(vm: MainViewModel = viewModel()) {
                     NavigationBarItem(
                         selected = tab == i,
                         onClick = { go(i, null) },
-                        icon = { Text(icon, fontSize = 20.sp) },
+                        icon = { br.com.celularsaudavel.ui.BareIcon(icon, if (tab == i) CS.Green else CS.Muted) },
                         label = { Text(label) },
-                        colors = NavigationBarItemDefaults.colors(indicatorColor = CS.GreenSoft)
+                        colors = NavigationBarItemDefaults.colors(
+                            indicatorColor = CS.GreenSoft,
+                            selectedTextColor = CS.Green,
+                            unselectedTextColor = CS.Muted
+                        )
                     )
                 }
             }
@@ -434,7 +457,14 @@ fun AppRoot(vm: MainViewModel = viewModel()) {
                     onOpenSystemTrash = { sub = "trash" },
                     onPreview = openPreview
                 )
-                sub == "history" -> HistoryScreen(state, onBack = { sub = null })
+                sub == "history" -> HistoryScreen(
+                    state, onBack = { sub = null },
+                    onLoad = vm::loadBackupHistory,
+                    onRestore = vm::restoreRecycle,
+                    onDeleteForever = vm::deleteRecycleForever,
+                    onOpenSystemTrash = { sub = "trash" },
+                    onOpenRecover = { sub = "recover" },
+                )
                 sub == "perms" -> PermissionsScreen(
                     state, onBack = { sub = null },
                     onRequestMedia = requestMedia,
@@ -511,6 +541,8 @@ fun AppRoot(vm: MainViewModel = viewModel()) {
                     onFree = freeSpace,
                     onRefresh = vm::loadDriveAccount,
                     onOpenPremium = { sub = "premium" },
+                    onSwitchAccount = switchAccount,
+                    onOpenHistory = { sub = "history" },
                 )
                 tab == TAB_APPS -> AppsScreen(
                     state,

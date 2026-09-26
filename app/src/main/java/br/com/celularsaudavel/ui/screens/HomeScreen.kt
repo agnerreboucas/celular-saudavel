@@ -87,7 +87,7 @@ fun HomeScreen(
                                     .padding(14.dp),
                                 verticalAlignment = androidx.compose.ui.Alignment.CenterVertically
                             ) {
-                                Text(health.face, fontSize = 30.sp)
+                                AppIcon("🩺", size = 44.dp, tint = Status.forScore(health.value), background = Color.White)
                                 Spacer(Modifier.width(12.dp))
                                 Text(health.likePerson, color = CS.Ink, fontSize = 14.sp, lineHeight = 20.sp)
                             }

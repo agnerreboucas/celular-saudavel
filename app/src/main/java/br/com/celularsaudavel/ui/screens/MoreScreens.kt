@@ -101,50 +101,6 @@ fun MoreScreen(
 }
 
 @Composable
-fun HistoryScreen(state: UiState, onBack: () -> Unit) {
-    LazyColumn(
-        modifier = Modifier.fillMaxSize(),
-        contentPadding = PaddingValues(20.dp),
-        verticalArrangement = Arrangement.spacedBy(10.dp)
-    ) {
-        item { ScreenHeader("Histórico", null, onBack) }
-        item {
-            CsCard {
-                Column {
-                    Text("Espaço liberado", color = CS.Muted, fontSize = 14.sp)
-                    Text(formatBytes(state.totalFreed), fontSize = 34.sp, fontWeight = FontWeight.Bold, color = CS.Ink)
-                    val trashed = state.history.filter { it.type == HistoryType.VIDEOS_TRASHED }.sumOf { it.bytes }
-                    if (trashed > 0) {
-                        Text("+ ${formatBytes(trashed)} na lixeira do sistema", color = CS.Muted, fontSize = 13.sp)
-                    }
-                }
-            }
-        }
-        if (state.history.isEmpty()) {
-            item { Text("Quando você liberar espaço, o registro aparece aqui.", color = CS.Muted) }
-        }
-        items(state.history) { h ->
-            CsCard {
-                Row(verticalAlignment = Alignment.CenterVertically) {
-                    Column(Modifier.weight(1f)) {
-                        Text(h.type.label, fontWeight = FontWeight.SemiBold, color = CS.Ink)
-                        Text(
-                            buildString {
-                                append(formatDate(h.timestamp))
-                                if (h.detail.isNotBlank()) append(" · ").append(h.detail)
-                                else append(" · ${h.count} arquivo").append(if (h.count == 1) "" else "s")
-                            },
-                            color = CS.Muted, fontSize = 13.sp
-                        )
-                    }
-                    Text(formatBytes(h.bytes), fontWeight = FontWeight.SemiBold, color = CS.Ink)
-                }
-            }
-        }
-    }
-}
-
-@Composable
 fun PermissionsScreen(
     state: UiState,
     onBack: () -> Unit,

@@ -139,7 +139,7 @@ fun FileThumb(path: String, name: String, modifier: Modifier = Modifier) {
     ) {
         val b = bmp
         if (b != null) Image(b, null, contentScale = ContentScale.Crop, modifier = Modifier.fillMaxSize())
-        else Text(kindEmoji(kind), fontSize = 20.sp)
+        else BareIcon(kindEmoji(kind), CS.Green)
     }
 }
 
@@ -191,7 +191,7 @@ fun PreviewDialog(t: PreviewTarget, onClose: () -> Unit) {
                     Kind.HTML -> HtmlPreview(t)
                     Kind.TEXT -> TextPreview(t)
                     Kind.OTHER -> Column(horizontalAlignment = Alignment.CenterHorizontally, modifier = Modifier.padding(24.dp)) {
-                        Text("📦", fontSize = 48.sp)
+                        BareIcon("📦", Color.White, 56.dp)
                         Spacer(Modifier.height(8.dp))
                         Text("Este tipo de arquivo não abre aqui dentro.", color = Color.White)
                     }
@@ -269,7 +269,7 @@ private fun AudioPreview(t: PreviewTarget) {
         }
     }
     Column(Modifier.padding(24.dp), horizontalAlignment = Alignment.CenterHorizontally) {
-        Text("🎵", fontSize = 56.sp)
+        BareIcon("🎵", Color.White, 64.dp)
         Spacer(Modifier.height(16.dp))
         Slider(
             value = pos,

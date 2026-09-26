@@ -63,7 +63,7 @@ fun PremiumScreen(
                         "📱" to "Use em todos os seus celulares com a mesma conta Google",
                     ).forEach { (e, t) ->
                         Row(verticalAlignment = Alignment.CenterVertically) {
-                            Text(e, fontSize = 20.sp)
+                            AppIcon(e, size = 36.dp, corner = 10.dp)
                             Spacer(Modifier.width(12.dp))
                             Text(t, color = CS.Ink, fontSize = 15.sp, lineHeight = 20.sp)
                         }

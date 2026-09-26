@@ -27,8 +27,13 @@ data class BackupRow(
     val state: String,
     val driveId: String?,
     val md5: String?,
-    val error: String?
+    val error: String?,
+    val account: String? = null,
+    val updated: Long = 0,
 )
+
+/** Quanto foi protegido em cada conta do Google. */
+data class AccountBackup(val email: String, val count: Int, val bytes: Long, val lastAt: Long)
 
 data class BackupSummary(
     val selected: Int = 0,
@@ -44,7 +49,7 @@ data class BackupSummary(
     val verifiedVideos: Int = 0,
 )
 
-class BackupDb(context: Context) : SQLiteOpenHelper(context, "backup.db", null, 1) {
+class BackupDb(context: Context) : SQLiteOpenHelper(context, "backup.db", null, 2) {
 
     override fun onCreate(db: SQLiteDatabase) {
         db.execSQL(
@@ -58,13 +63,16 @@ class BackupDb(context: Context) : SQLiteOpenHelper(context, "backup.db", null, 
                 drive_id TEXT,
                 md5 TEXT,
                 error TEXT,
-                updated INTEGER NOT NULL
+                updated INTEGER NOT NULL,
+                account TEXT
             )"""
         )
         db.execSQL("CREATE INDEX idx_state ON items(state)")
     }
 
-    override fun onUpgrade(db: SQLiteDatabase, oldVersion: Int, newVersion: Int) {}
+    override fun onUpgrade(db: SQLiteDatabase, oldVersion: Int, newVersion: Int) {
+        if (oldVersion < 2) db.execSQL("ALTER TABLE items ADD COLUMN account TEXT")
+    }
 
     /** Coloca na fila; o que já foi verificado ou liberado não volta para a fila. */
     fun enqueue(files: List<MediaFile>, categoryOf: (MediaFile) -> String) {
@@ -115,24 +123,41 @@ class BackupDb(context: Context) : SQLiteOpenHelper(context, "backup.db", null, 
         return out
     }
 
-    private fun query(where: String, limit: Int): List<BackupRow> {
+    private fun query(where: String, limit: Int, order: String = "size ASC"): List<BackupRow> {
         val out = ArrayList<BackupRow>()
         readableDatabase.rawQuery(
-            "SELECT uri,name,mime,size,category,state,drive_id,md5,error FROM items WHERE $where ORDER BY size ASC LIMIT $limit", null
+            "SELECT uri,name,mime,size,category,state,drive_id,md5,error,account,updated FROM items WHERE $where ORDER BY $order LIMIT $limit", null
         ).use { c ->
             while (c.moveToNext()) {
                 out += BackupRow(
                     c.getString(0), c.getString(1), c.getString(2), c.getLong(3), c.getString(4), c.getString(5),
-                    c.getString(6), c.getString(7), c.getString(8)
+                    c.getString(6), c.getString(7), c.getString(8), c.getString(9), c.getLong(10)
                 )
             }
         }
         return out
     }
 
-    fun mark(uri: String, state: String, driveId: String? = null, md5: String? = null, error: String? = null) {
+    /** Últimos arquivos protegidos (com a conta de destino), do mais novo para o mais antigo. */
+    fun recentProtected(limit: Int = 60): List<BackupRow> =
+        query("state IN ('${BackupState.VERIFIED}','${BackupState.DELETED_LOCAL}')", limit, "updated DESC")
+
+    fun byAccount(): List<AccountBackup> {
+        val out = ArrayList<AccountBackup>()
+        readableDatabase.rawQuery(
+            "SELECT COALESCE(account,''), COUNT(*), COALESCE(SUM(size),0), MAX(updated) FROM items " +
+                "WHERE state IN ('${BackupState.VERIFIED}','${BackupState.DELETED_LOCAL}') GROUP BY COALESCE(account,'') ORDER BY MAX(updated) DESC",
+            null
+        ).use { c ->
+            while (c.moveToNext()) out += AccountBackup(c.getString(0), c.getInt(1), c.getLong(2), c.getLong(3))
+        }
+        return out
+    }
+
+    fun mark(uri: String, state: String, driveId: String? = null, md5: String? = null, error: String? = null, account: String? = null) {
         val cv = ContentValues().apply {
             put("state", state); put("updated", System.currentTimeMillis())
+            if (account != null) put("account", account)
             if (driveId != null) put("drive_id", driveId)
             if (md5 != null) put("md5", md5)
             put("error", error)

@@ -122,7 +122,7 @@ fun RecoverScreen(
                         if (r.place == BinPlace.PHONE && r.binPath != null) {
                             FileThumb(r.binPath, r.name, Modifier.size(48.dp))
                         } else {
-                            Box(Modifier.size(48.dp).background(CS.Surface2), contentAlignment = Alignment.Center) { Text("☁️", fontSize = 20.sp) }
+                            AppIcon("☁️", size = 48.dp)
                         }
                         Spacer(Modifier.width(12.dp))
                         Column(Modifier.weight(1f)) {

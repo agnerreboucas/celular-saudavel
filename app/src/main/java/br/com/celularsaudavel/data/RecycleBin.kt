@@ -27,6 +27,8 @@ data class RecycleItem(
     val place: String,
     val binPath: String?,
     val driveId: String?,
+    /** Conta do Google onde ficou guardado (itens da nuvem). */
+    val account: String? = null,
 )
 
 /**
@@ -35,7 +37,7 @@ data class RecycleItem(
  * - Na nuvem: o arquivo vai para "Celular Saudável/Recuperáveis" no Drive do usuário e sai do celular.
  * Depois do prazo escolhido (30, 90 ou 180 dias), é apagado de vez.
  */
-class RecycleBin(private val context: Context) : SQLiteOpenHelper(context, "recycle.db", null, 1) {
+class RecycleBin(private val context: Context) : SQLiteOpenHelper(context, "recycle.db", null, 2) {
 
     private val prefs = context.getSharedPreferences("recycle", Context.MODE_PRIVATE)
 
@@ -65,18 +67,21 @@ class RecycleBin(private val context: Context) : SQLiteOpenHelper(context, "recy
                 deleted_at INTEGER NOT NULL,
                 place TEXT NOT NULL,
                 bin_path TEXT,
-                drive_id TEXT
+                drive_id TEXT,
+                account TEXT
             )"""
         )
     }
 
-    override fun onUpgrade(db: SQLiteDatabase, oldVersion: Int, newVersion: Int) {}
+    override fun onUpgrade(db: SQLiteDatabase, oldVersion: Int, newVersion: Int) {
+        if (oldVersion < 2) db.execSQL("ALTER TABLE items ADD COLUMN account TEXT")
+    }
 
-    private fun insert(original: String, name: String, size: Long, place: String, binPath: String?, driveId: String?) {
+    private fun insert(original: String, name: String, size: Long, place: String, binPath: String?, driveId: String?, account: String? = null) {
         writableDatabase.insert("items", null, ContentValues().apply {
             put("original", original); put("name", name); put("size", size)
             put("deleted_at", System.currentTimeMillis()); put("place", place)
-            put("bin_path", binPath); put("drive_id", driveId)
+            put("bin_path", binPath); put("drive_id", driveId); put("account", account)
         })
     }
 
@@ -104,6 +109,7 @@ class RecycleBin(private val context: Context) : SQLiteOpenHelper(context, "recy
     /** Envia para o Drive (com verificação) e só então tira do celular. */
     fun moveToCloud(files: List<LocalFile>, drive: DriveRepository, onProgress: (Int) -> Unit): List<LocalFile> {
         drive.refreshToken()
+        val account = runCatching { drive.account().email }.getOrNull()?.ifBlank { null } ?: drive.email
         val root = drive.folderId(DriveRepository.ROOT_FOLDER, null)
         val folder = drive.folderId("Recuperáveis", root)
         val moved = ArrayList<LocalFile>()
@@ -112,7 +118,7 @@ class RecycleBin(private val context: Context) : SQLiteOpenHelper(context, "recy
                 val src = File(lf.path)
                 val r = drive.upload(Uri.fromFile(src), lf.name, mimeOf(lf.name), folder)
                 if (r.verified && src.delete()) {
-                    insert(lf.path, lf.name, lf.sizeBytes, BinPlace.CLOUD, null, r.driveId)
+                    insert(lf.path, lf.name, lf.sizeBytes, BinPlace.CLOUD, null, r.driveId, account)
                     moved += lf
                 } else if (!r.verified) {
                     runCatching { drive.delete(r.driveId) }
@@ -130,13 +136,13 @@ class RecycleBin(private val context: Context) : SQLiteOpenHelper(context, "recy
     fun list(sinceMs: Long = 0): List<RecycleItem> {
         val out = ArrayList<RecycleItem>()
         readableDatabase.rawQuery(
-            "SELECT id, original, name, size, deleted_at, place, bin_path, drive_id FROM items WHERE deleted_at >= ? ORDER BY deleted_at DESC",
+            "SELECT id, original, name, size, deleted_at, place, bin_path, drive_id, account FROM items WHERE deleted_at >= ? ORDER BY deleted_at DESC",
             arrayOf(sinceMs.toString())
         ).use { c ->
             while (c.moveToNext()) {
                 out += RecycleItem(
                     c.getLong(0), c.getString(1), c.getString(2), c.getLong(3), c.getLong(4),
-                    c.getString(5), c.getString(6), c.getString(7)
+                    c.getString(5), c.getString(6), c.getString(7), c.getString(8)
                 )
             }
         }
@@ -156,7 +162,7 @@ class RecycleBin(private val context: Context) : SQLiteOpenHelper(context, "recy
                         src.exists() && (src.renameTo(dest) || runCatching { src.copyTo(dest); src.delete() }.getOrDefault(false))
                     }
                     else -> {
-                        val d = drive ?: return@forEachIndexed
+                        val d = drive?.forAccount(item.account) ?: return@forEachIndexed
                         val id = item.driveId ?: return@forEachIndexed
                         d.download(id, dest)
                         runCatching { d.delete(id) }
@@ -185,7 +191,7 @@ class RecycleBin(private val context: Context) : SQLiteOpenHelper(context, "recy
                     BinPlace.PHONE -> it.binPath?.let { p -> File(p).delete() }
                     else -> {
                         val id = it.driveId
-                        if (id != null && drive != null) drive.delete(id)
+                        if (id != null && drive != null) drive.forAccount(it.account).delete(id)
                     }
                 }
                 remove(it.id)
@@ -197,6 +203,9 @@ class RecycleBin(private val context: Context) : SQLiteOpenHelper(context, "recy
     }
 
     /** Apaga de vez o que passou do prazo. Itens da nuvem só saem se o Drive estiver acessível. */
+    /** Até quando cada item ainda pode voltar. */
+    fun expiresAt(item: RecycleItem): Long = item.deletedAt + retentionDays * DAY_MS
+
     fun purgeExpired(drive: DriveRepository?) {
         val limit = System.currentTimeMillis() - retentionDays * DAY_MS
         val expired = list().filter { it.deletedAt < limit }
