@@ -24,6 +24,12 @@ tap_text() {
   B=$(adb shell cat /sdcard/ui.xml | tr '>' '\n' | grep -m1 "text=\"$1" | sed -E 's/.*bounds="\[([0-9]+),([0-9]+)\]\[([0-9]+),([0-9]+)\]".*/\1 \2 \3 \4/')
   if [ -n "$B" ]; then set -- $B; adb shell input tap $(( ($1+$3)/2 )) $(( ($2+$4)/2 )); echo "tocou"; else echo "nao achou"; fi
 }
+tap_text "Pular"
+sleep 2
+tap_text "Seu nome" && adb shell input text "Maria" && adb shell input keyevent 111
+sleep 1
+tap_text "Começar"
+sleep 3
 tap_text "Analisar meu celular"
 sleep 40
 adb shell pidof $PKG || echo "CAIU DEPOIS DA ANALISE"
