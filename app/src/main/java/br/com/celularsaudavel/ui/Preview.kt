@@ -244,20 +244,44 @@ private fun VideoPreview(t: PreviewTarget) {
 @Composable
 private fun AudioPreview(t: PreviewTarget) {
     val context = LocalContext.current
-    val player = remember(t) {
-        try {
-            MediaPlayer().apply {
-                setDataSource(context, t.readUri() ?: Uri.EMPTY)
-                prepare()
+    // Abre o arquivo pelo próprio app (FileDescriptor): o tocador do sistema não tem acesso às pastas
+    // do WhatsApp em Android/media, então passar só o caminho fazia o áudio não tocar.
+    var failed by remember(t) { mutableStateOf(false) }
+    val player by produceState<MediaPlayer?>(null, t) {
+        value = withContext(Dispatchers.IO) {
+            try {
+                val mp = MediaPlayer()
+                val path = t.path
+                if (path != null) {
+                    java.io.FileInputStream(File(path)).use { mp.setDataSource(it.fd) }
+                } else {
+                    val u = t.uri ?: return@withContext null
+                    context.contentResolver.openFileDescriptor(u, "r")?.use { mp.setDataSource(it.fileDescriptor) }
+                        ?: return@withContext null
+                }
+                mp.prepare()
+                mp
+            } catch (_: Exception) {
+                null
             }
-        } catch (_: Exception) {
-            null
         }
+        if (value == null) failed = true
     }
-    DisposableEffect(player) { onDispose { player?.release() } }
-    if (player == null) {
-        Text("Não foi possível tocar este áudio.", color = Color.White); return
+    val p0 = player
+    DisposableEffect(p0) { onDispose { p0?.release() } }
+    if (p0 == null) {
+        Column(horizontalAlignment = Alignment.CenterHorizontally, modifier = Modifier.padding(24.dp)) {
+            if (failed) {
+                Text("Este áudio não toca aqui. Toque em \"Abrir com outro app\" para ouvir.", color = Color.White)
+            } else {
+                CircularProgressIndicator(color = Color.White)
+                Spacer(Modifier.height(12.dp))
+                Text("Preparando o áudio…", color = Color(0xFFB9C0BC), fontSize = 13.sp)
+            }
+        }
+        return
     }
+    val player = p0
     var playing by remember { mutableStateOf(false) }
     var pos by remember { mutableFloatStateOf(0f) }
     val dur = player.duration.coerceAtLeast(1)

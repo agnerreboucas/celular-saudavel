@@ -132,6 +132,13 @@ fun CleanScreen(
                         onClick = { onOpen("folders") }
                     )
                 }
+                item {
+                    RowCard(
+                        "🎙️", "Arquivos por origem",
+                        "Áudios, fotos, vídeos e documentos separados: WhatsApp, gravador, câmera, Downloads…",
+                        onClick = { onOpen("origins") }
+                    )
+                }
             }
 
             item { SectionTitle("Aplicativos") }

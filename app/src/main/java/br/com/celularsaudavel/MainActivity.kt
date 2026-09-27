@@ -435,6 +435,12 @@ fun AppRoot(vm: MainViewModel = viewModel()) {
                     onRestored = vm::onTrashRestored,
                     onPreview = openPreview
                 )
+                sub == "origins" -> br.com.celularsaudavel.ui.screens.OriginsScreen(
+                    state, onBack = { sub = null },
+                    onLoad = vm::loadOrigins,
+                    onOpenCategory = { id -> sub = "folder:$id" },
+                    onRequestFolders = requestFolders
+                )
                 sub == "folders" -> FoldersScreen(
                     state, onBack = { sub = null },
                     onLoad = { vm.loadFolders(withBiggest = true) },
@@ -443,7 +449,7 @@ fun AppRoot(vm: MainViewModel = viewModel()) {
                 )
                 sub?.startsWith("folder:") == true -> FolderCategoryScreen(
                     state, categoryId = sub!!.removePrefix("folder:"),
-                    onBack = { sub = "folders" },
+                    onBack = { sub = if (sub!!.startsWith("folder:origin:")) "origins" else "folders" },
                     onDelete = { files, mode -> vm.deleteFolderFiles(files, mode) },
                     onPreview = openPreview,
                     onOpenRecover = { sub = "recover" }

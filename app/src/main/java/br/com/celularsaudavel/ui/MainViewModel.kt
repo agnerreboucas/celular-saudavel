@@ -114,6 +114,9 @@ data class UiState(
 
     val foldersLoading: Boolean = false,
     val folders: List<FolderCategory> = emptyList(),
+    /** Fotos, vídeos, áudios e documentos separados pela origem (WhatsApp, gravador, câmera…) */
+    val origins: List<FolderCategory> = emptyList(),
+    val originsLoading: Boolean = false,
     val bigFolders: List<Pair<String, Long>> = emptyList(),
 
     val appsLoading: Boolean = false,
@@ -178,6 +181,7 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
     private val media = MediaRepository(app)
     private val appsRepo = AppsRepository(app)
     private val folderRepo = FolderRepository(app)
+    private val originRepo = br.com.celularsaudavel.data.OriginRepository(folderRepo)
     private val historyStore = HistoryStore(app)
     private val drive = DriveRepository(app)
     private val backupDb = BackupDb(app)
@@ -324,6 +328,15 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
         }
     }
 
+    fun loadOrigins() {
+        if (_state.value.originsLoading) return
+        viewModelScope.launch(Dispatchers.IO) {
+            _state.update { it.copy(originsLoading = true, folderAccess = folderRepo.hasAllFilesAccess()) }
+            val list = runCatching { originRepo.scan() }.getOrDefault(emptyList())
+            _state.update { it.copy(origins = list, originsLoading = false) }
+        }
+    }
+
     fun deleteFolderFiles(files: List<LocalFile>, mode: DeleteMode = DeleteMode.FOREVER) {
         viewModelScope.launch(Dispatchers.IO) {
             _state.update { it.copy(deleting = 0 to files.size, recycleMessage = null) }
@@ -353,6 +366,7 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
                     s.copy(
                         history = history,
                         folders = s.folders.map { c -> c.copy(files = c.files.filterNot { it.path in gone }) }.filter { it.files.isNotEmpty() },
+                        origins = s.origins.map { c -> c.copy(files = c.files.filterNot { it.path in gone }) }.filter { it.files.isNotEmpty() },
                         storage = media.storageInfo()
                     )
                 }

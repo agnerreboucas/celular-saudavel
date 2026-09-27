@@ -3,6 +3,7 @@ package br.com.celularsaudavel.ui.screens
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.ui.draw.clip
 import androidx.compose.foundation.layout.*
@@ -109,7 +110,8 @@ fun FolderCategoryScreen(
     onPreview: (PreviewTarget) -> Unit,
     onOpenRecover: () -> Unit,
 ) {
-    val cat = state.folders.firstOrNull { it.id == categoryId }
+    val cat = (state.folders + state.origins).firstOrNull { it.id == categoryId }
+    val title = if (cat != null && cat.id.startsWith("origin:")) "${cat.group}: ${cat.title}" else cat?.title
     val files = cat?.files ?: emptyList()
     var selected by remember(files) {
         mutableStateOf(if (cat?.safe == true) files.map { it.path }.toSet() else emptySet())
@@ -125,7 +127,7 @@ fun FolderCategoryScreen(
             contentPadding = PaddingValues(20.dp),
             verticalArrangement = Arrangement.spacedBy(8.dp)
         ) {
-            item { ScreenHeader(cat?.title ?: "Pasta", cat?.description, onBack) }
+            item { ScreenHeader(title ?: "Pasta", cat?.description, onBack) }
             if (files.isNotEmpty()) item {
                 Text("Toque num arquivo para ver o que é. Marque a caixa para selecionar.", color = CS.Muted, fontSize = 13.sp)
             }
@@ -248,5 +250,82 @@ private fun DeleteOption(title: String, desc: String, enabled: Boolean, onClick:
     ) {
         Text(title, fontWeight = FontWeight.SemiBold, color = if (enabled) CS.Ink else CS.Muted)
         Text(desc, fontSize = 13.sp, color = CS.Muted, lineHeight = 18.sp)
+    }
+}
+
+
+/** Fotos, vídeos, áudios e documentos separados pela origem: WhatsApp, gravador, câmera, Downloads… */
+@Composable
+fun OriginsScreen(
+    state: UiState,
+    onBack: () -> Unit,
+    onLoad: () -> Unit,
+    onOpenCategory: (String) -> Unit,
+    onRequestFolders: () -> Unit,
+) {
+    LaunchedEffect(state.folderAccess) { if (state.folderAccess && state.origins.isEmpty()) onLoad() }
+    var type by remember { mutableStateOf(br.com.celularsaudavel.data.FileType.AUDIO) }
+    val list = state.origins.filter { it.group == type }
+    LazyColumn(
+        modifier = Modifier.fillMaxSize(),
+        contentPadding = PaddingValues(20.dp),
+        verticalArrangement = Arrangement.spacedBy(12.dp)
+    ) {
+        item {
+            ScreenHeader(
+                "Por origem",
+                "Veja de onde veio cada arquivo e selecione tudo de uma origem de uma vez, como todos os áudios do WhatsApp.",
+                onBack
+            )
+        }
+        if (!state.folderAccess) {
+            item {
+                Notice(
+                    "Para separar os arquivos por origem, libere o \"Acesso a todos os arquivos\". A análise acontece só no seu celular.",
+                    action = "Liberar acesso",
+                    onAction = onRequestFolders
+                )
+            }
+            return@LazyColumn
+        }
+        item {
+            Row(
+                Modifier.horizontalScroll(androidx.compose.foundation.rememberScrollState()),
+                horizontalArrangement = Arrangement.spacedBy(8.dp)
+            ) {
+                br.com.celularsaudavel.data.FileType.all.forEach { t ->
+                    val n = state.origins.filter { it.group == t }.sumOf { it.files.size }
+                    Pill(if (n > 0) "$t · ${formatCount(n)}" else t, type == t) { type = t }
+                }
+            }
+        }
+        if (state.originsLoading) {
+            item {
+                Column {
+                    LinearProgressIndicator(Modifier.fillMaxWidth(), color = CS.Green, trackColor = CS.Surface2)
+                    Spacer(Modifier.height(6.dp))
+                    Text("Procurando arquivos em todas as pastas…", color = CS.Muted, fontSize = 13.sp)
+                }
+            }
+        } else if (list.isEmpty()) {
+            item { Notice("Nenhum arquivo deste tipo encontrado.", soft = false) }
+        } else {
+            item {
+                Text(
+                    "${formatCount(list.sumOf { it.files.size })} arquivos · ${formatBytes(list.sumOf { it.bytes })}",
+                    color = CS.Ink, fontWeight = FontWeight.SemiBold
+                )
+            }
+        }
+        items(list, key = { it.id }) { c ->
+            RowCard(
+                c.emoji, c.title,
+                "${formatCount(c.files.size)} arquivos · ${formatBytes(c.bytes)}\n${c.description}",
+                onClick = { onOpenCategory(c.id) }
+            )
+        }
+        if (!state.originsLoading) {
+            item { TextButton(onClick = onLoad) { Text("Procurar de novo", color = CS.Ink) } }
+        }
     }
 }
