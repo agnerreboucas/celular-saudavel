@@ -247,7 +247,7 @@ private fun AudioPreview(t: PreviewTarget) {
     // Abre o arquivo pelo próprio app (FileDescriptor): o tocador do sistema não tem acesso às pastas
     // do WhatsApp em Android/media, então passar só o caminho fazia o áudio não tocar.
     var failed by remember(t) { mutableStateOf(false) }
-    val player by produceState<MediaPlayer?>(null, t) {
+    val loaded by produceState<MediaPlayer?>(null, t) {
         value = withContext(Dispatchers.IO) {
             try {
                 val mp = MediaPlayer()
@@ -267,7 +267,7 @@ private fun AudioPreview(t: PreviewTarget) {
         }
         if (value == null) failed = true
     }
-    val p0 = player
+    val p0 = loaded
     DisposableEffect(p0) { onDispose { p0?.release() } }
     if (p0 == null) {
         Column(horizontalAlignment = Alignment.CenterHorizontally, modifier = Modifier.padding(24.dp)) {
